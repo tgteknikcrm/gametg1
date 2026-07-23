@@ -1,0 +1,49 @@
+"use client";
+
+import { Canvas } from "@react-three/fiber";
+import * as THREE from "three";
+
+import { CameraRig } from "@/components/game/CameraRig";
+import { Ground } from "@/components/game/Ground";
+import { HoverHighlight } from "@/components/game/HoverHighlight";
+import { PlacedObjects } from "@/components/game/PlacedObjects";
+import { PlacementGhost } from "@/components/game/PlacementGhost";
+import { SelectionOutline } from "@/components/game/SelectionOutline";
+
+const SKY_COLOR = new THREE.Color("#bcd9ef");
+
+/**
+ * Sahnenin kökü.
+ *
+ * Gölge kapalı: Faz 0'da her şey statik, gerçek zamanlı gölge haritası entegre
+ * grafikte bedava değil. Brief madde 7 uyarınca gölgeler yalnızca hareketli
+ * nesneler geldiğinde açılacak.
+ *
+ * `dpr` üst sınırı 1.5: retina olmayan bir dizüstünde 2x piksel oranı, kazandırdığı
+ * netlikten çok daha pahalıya mal oluyor.
+ */
+export default function GameCanvas() {
+  return (
+    <Canvas
+      orthographic
+      shadows={false}
+      dpr={[1, 1.5]}
+      camera={{ position: [40, 40, 40], zoom: 34, near: 0.1, far: 400 }}
+      gl={{ antialias: true, powerPreference: "high-performance" }}
+      onCreated={({ scene }) => {
+        scene.background = SKY_COLOR;
+      }}
+    >
+      <ambientLight intensity={1.9} />
+      <directionalLight position={[18, 26, 12]} intensity={2.4} />
+      <directionalLight position={[-14, 10, -18]} intensity={0.6} />
+
+      <CameraRig />
+      <Ground />
+      <HoverHighlight />
+      <PlacedObjects />
+      <SelectionOutline />
+      <PlacementGhost />
+    </Canvas>
+  );
+}
