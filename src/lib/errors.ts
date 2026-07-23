@@ -35,7 +35,7 @@ const MESSAGES: Record<GameErrorCode, string> = {
   not_authenticated: "Oturumun kapanmış, tekrar giriş yap",
   unknown_type: "Bilinmeyen yapı türü",
   invalid_rotation: "Geçersiz yön",
-  profile_missing: "Profilin bulunamadı",
+  profile_missing: "Bu oturum artık geçerli değil, tekrar giriş yapman gerekiyor",
   parcel_missing: "Şehirde uygun arsa yok",
   no_selection: "Önce bir nesne seç",
   network: "Sunucuya ulaşılamadı",
@@ -43,6 +43,25 @@ const MESSAGES: Record<GameErrorCode, string> = {
 };
 
 const KNOWN_CODES = new Set(Object.keys(MESSAGES));
+
+/** İstemci tarafında bilinçli olarak fırlatılan, kodu taşıyan hata. */
+export class GameError extends Error {
+  readonly code: GameErrorCode;
+
+  constructor(code: GameErrorCode) {
+    super(code);
+    this.name = "GameError";
+    this.code = code;
+  }
+}
+
+/**
+ * Oturum bu hatalardan sonra kurtarılamaz — yeniden denemek işe yaramaz,
+ * tek çıkış yolu yeniden giriş.
+ */
+export function isFatalSessionError(code: GameErrorCode): boolean {
+  return code === "profile_missing" || code === "not_authenticated";
+}
 
 /** Hata kodunu kullanıcıya gösterilecek Türkçe metne çevirir. */
 export function errorMessage(code: GameErrorCode | null): string {
@@ -56,6 +75,7 @@ export function errorMessage(code: GameErrorCode | null): string {
  */
 export function toGameErrorCode(error: unknown): GameErrorCode {
   if (!error) return "unknown";
+  if (error instanceof GameError) return error.code;
 
   const message =
     typeof error === "string"
@@ -64,9 +84,15 @@ export function toGameErrorCode(error: unknown): GameErrorCode {
 
   if (KNOWN_CODES.has(message)) return message as GameErrorCode;
 
+  // PostgREST'in kendi hata kodları. PGRST116: beklenen tek satır bulunamadı —
+  // örneğin oturum jetonu geçerli ama profil satırı silinmişse.
+  const pgCode = typeof error === "object" ? (error as PostgrestError)?.code : undefined;
+  if (pgCode === "PGRST116") return "not_found";
+  if (pgCode === "PGRST301" || pgCode === "42501") return "not_authenticated";
+
   // Ağ katmanı hataları PostgREST'e hiç ulaşmadan burada biter.
-  if (/fetch|network|failed to fetch/i.test(message)) return "network";
-  if (/jwt|token|session/i.test(message)) return "not_authenticated";
+  if (/fetch|network|failed to fetch|load failed/i.test(message)) return "network";
+  if (/jwt|token|session|refresh/i.test(message)) return "not_authenticated";
 
   return "unknown";
 }

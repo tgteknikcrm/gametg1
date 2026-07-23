@@ -5,6 +5,7 @@
  * Sunucu tarafındaki karşılığı `scripts/db-contract-test.mjs` ile ayrıca test edilir.
  */
 import { buildOccupancy, occupiedCells } from "@/lib/collision";
+import { GameError, isFatalSessionError, toGameErrorCode, toGameErrorMessage } from "@/lib/errors";
 import {
   GRID_SIZE,
   cellToWorld,
@@ -142,6 +143,24 @@ console.log("\n5) Ekonomi ve seviye kapıları");
   check("parası yetmeyen reddedildi", at(10, 9).reason === "insufficient_funds");
   check("seviyesi yetmeyen reddedildi", at(999999, 1).reason === "level_required");
   check("taşımada maliyet aranmaz", at(0, 9, false).valid);
+}
+
+console.log("\n6) Hata eşlemesi");
+{
+  // Sunucunun fırlattığı exception adı doğrudan koda çevrilmeli.
+  check("PL/pgSQL exception adı tanınıyor", toGameErrorCode({ message: "cell_occupied" }) === "cell_occupied");
+  check("bilinmeyen mesaj -> unknown", toGameErrorCode({ message: "bir şeyler ters gitti" }) === "unknown");
+
+  // Jeton geçerliyken profil satırı yoksa PostgREST bunu döner.
+  check("PGRST116 -> not_found", toGameErrorCode({ code: "PGRST116", message: "Cannot coerce" }) === "not_found");
+  check("yetki hatası -> not_authenticated", toGameErrorCode({ code: "42501", message: "denied" }) === "not_authenticated");
+  check("ağ hatası -> network", toGameErrorCode(new TypeError("Failed to fetch")) === "network");
+
+  // İstemcinin kendi fırlattığı kodlu hata.
+  check("GameError kodunu taşıyor", toGameErrorCode(new GameError("profile_missing")) === "profile_missing");
+  check("profil eksikse oturum kurtarılamaz", isFatalSessionError("profile_missing"));
+  check("dolu hücre oturumu bozmaz", !isFatalSessionError("cell_occupied"));
+  check("her kodun Türkçe karşılığı var", toGameErrorMessage(new GameError("parcel_missing")).length > 0);
 }
 
 console.log(failures === 0 ? "\nTüm kontroller geçti.\n" : `\n${failures} kontrol başarısız.\n`);

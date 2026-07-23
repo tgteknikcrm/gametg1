@@ -30,7 +30,14 @@ export function useSession(): SessionState {
 
     const apply = (userId: string | null) => {
       if (!active) return;
-      useWorldStore.getState().setUserId(userId);
+      const world = useWorldStore.getState();
+      world.setUserId(userId);
+      // Çıkışta izdüşümü boşalt: bir sonraki kullanıcı önceki oyuncunun
+      // altınını bir kare boyunca bile görmesin.
+      if (!userId) {
+        world.setProfile(null);
+        world.setObjects([]);
+      }
       setState({ status: userId ? "signed-in" : "signed-out", userId });
     };
 

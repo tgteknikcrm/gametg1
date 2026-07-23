@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
 
+import { LoadFailure } from "@/components/game/LoadFailure";
 import { BuildSidebar } from "@/components/ui-game/BuildSidebar";
 import { ModeHint } from "@/components/ui-game/ModeHint";
 import { NoticeToast } from "@/components/ui-game/NoticeToast";
@@ -12,7 +13,6 @@ import { useDevBridge } from "@/hooks/useDevBridge";
 import { useKeyboardControls } from "@/hooks/useKeyboardControls";
 import { useWorldMutations } from "@/hooks/useWorldMutations";
 import { useWorldSync } from "@/hooks/useWorldSync";
-import { toGameErrorMessage } from "@/lib/errors";
 import { useWorldStore } from "@/store/useWorldStore";
 
 /**
@@ -52,19 +52,15 @@ export function GameShell() {
       <ModeHint />
       <NoticeToast />
 
-      {error && <Overlay text={`Şehir yüklenemedi: ${toGameErrorMessage(error)}`} spinning={false} />}
-      {!error && !isReady && <Overlay text="Şehir yükleniyor…" spinning />}
+      {error && <LoadFailure error={error} />}
+      {!error && !isReady && (
+        <div className="absolute inset-0 z-40 grid place-items-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="hud-card flex items-center gap-2.5 px-4 py-3 text-[13px] text-slate-200">
+            <Loader2 className="size-4 animate-spin text-emerald-300" />
+            Şehir yükleniyor…
+          </div>
+        </div>
+      )}
     </main>
-  );
-}
-
-function Overlay({ text, spinning }: { text: string; spinning: boolean }) {
-  return (
-    <div className="absolute inset-0 z-40 grid place-items-center bg-slate-950/70 backdrop-blur-sm">
-      <div className="hud-card flex items-center gap-2.5 px-4 py-3 text-[13px] text-slate-200">
-        {spinning && <Loader2 className="size-4 animate-spin text-emerald-300" />}
-        {text}
-      </div>
-    </div>
   );
 }

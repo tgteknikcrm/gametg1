@@ -1,3 +1,4 @@
+import { GameError } from "@/lib/errors";
 import { getSupabase } from "@/lib/supabase/client";
 import type { ObjectType, Parcel, Profile, WorldObject } from "@/types/game";
 
@@ -23,13 +24,19 @@ export async function fetchCatalog(): Promise<ObjectType[]> {
   return data;
 }
 
+/**
+ * `maybeSingle` kullanılıyor: satır yoksa PostgREST'in ham PGRST116 hatası yerine
+ * anlamlı bir kod fırlatıyoruz. Bu durum gerçek hayatta oluyor — jeton hâlâ
+ * geçerliyken kullanıcı silinirse oturum açık görünür ama profil satırı yoktur.
+ */
 export async function fetchProfile(userId: string): Promise<Profile> {
   const { data, error } = await getSupabase()
     .from("profiles")
     .select("*")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new GameError("profile_missing");
   return data;
 }
 
@@ -40,8 +47,9 @@ export async function fetchParcel(): Promise<Parcel> {
     .select("*")
     .eq("ring", 0)
     .limit(1)
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (!data) throw new GameError("parcel_missing");
   return data;
 }
 
