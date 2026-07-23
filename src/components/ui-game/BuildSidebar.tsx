@@ -1,23 +1,32 @@
 "use client";
 
 import { Hammer } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 
 import { ObjectCard } from "@/components/ui-game/ObjectCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CATEGORY_LABELS, CATEGORY_ORDER, TYPES_BY_CATEGORY } from "@/lib/catalog";
+import { CATEGORY_LABELS, CATEGORY_ORDER } from "@/lib/categories";
 import { useGameStore } from "@/store/useGameStore";
 import { useWorldStore } from "@/store/useWorldStore";
+import type { ObjectCategory, ObjectType } from "@/types/game";
 
 /**
  * Sol panel: kategori sekmeleri ve nesne kartları.
- * Faz 1'de kartların kaynağı `object_types` tablosu olacak; bileşen aynı kalacak.
+ * Kartların kaynağı `object_types` tablosu — fiyat/seviye bilgisi sunucudan gelir.
  */
 export function BuildSidebar() {
   const placingTypeId = useGameStore((state) => state.placingTypeId);
   const startPlacing = useGameStore((state) => state.startPlacing);
-  const coins = useWorldStore((state) => state.player.coins);
-  const level = useWorldStore((state) => state.player.level);
+  const catalog = useWorldStore((state) => state.catalog);
+  const coins = useWorldStore((state) => state.profile?.coins ?? 0);
+  const level = useWorldStore((state) => state.profile?.level ?? 1);
+
+  const byCategory = useMemo(() => {
+    const groups = {} as Record<ObjectCategory, ObjectType[]>;
+    for (const category of CATEGORY_ORDER) groups[category] = [];
+    for (const type of catalog) groups[type.category]?.push(type);
+    return groups;
+  }, [catalog]);
 
   const handleSelect = useCallback(
     (typeId: string) => {
@@ -50,7 +59,7 @@ export function BuildSidebar() {
         {CATEGORY_ORDER.map((category) => (
           <TabsContent key={category} value={category} className="min-h-0 overflow-y-auto p-3">
             <div className="flex flex-col gap-2">
-              {TYPES_BY_CATEGORY[category].map((type) => (
+              {byCategory[category].map((type) => (
                 <ObjectCard
                   key={type.id}
                   type={type}

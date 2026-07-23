@@ -5,11 +5,10 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
 
 import { useDragAwareClick } from "@/hooks/useDragAwareClick";
-import { getObjectType } from "@/lib/catalog";
 import { CELL_SIZE, footprintCenterWorld, rotatedFootprint } from "@/lib/grid";
 import { buildingMaterial, unitBoxGeometry } from "@/lib/three-assets";
 import { useGameStore } from "@/store/useGameStore";
-import { useWorldStore } from "@/store/useWorldStore";
+import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 
 /** Kapasite baştan ayrılır; `count` ile kaç örneğin çizileceği belirlenir. */
 const MAX_INSTANCES = 800;

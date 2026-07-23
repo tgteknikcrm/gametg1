@@ -9,20 +9,21 @@ import { HoverHighlight } from "@/components/game/HoverHighlight";
 import { PlacedObjects } from "@/components/game/PlacedObjects";
 import { PlacementGhost } from "@/components/game/PlacementGhost";
 import { SelectionOutline } from "@/components/game/SelectionOutline";
+import type { GhostExecutor } from "@/store/useGameStore";
 
 const SKY_COLOR = new THREE.Color("#bcd9ef");
 
 /**
  * Sahnenin kökü.
  *
- * Gölge kapalı: Faz 0'da her şey statik, gerçek zamanlı gölge haritası entegre
+ * Gölge kapalı: Faz 1'de her şey statik, gerçek zamanlı gölge haritası entegre
  * grafikte bedava değil. Brief madde 7 uyarınca gölgeler yalnızca hareketli
  * nesneler geldiğinde açılacak.
  *
  * `dpr` üst sınırı 1.5: retina olmayan bir dizüstünde 2x piksel oranı, kazandırdığı
  * netlikten çok daha pahalıya mal oluyor.
  */
-export default function GameCanvas() {
+export default function GameCanvas({ executor }: { executor: GhostExecutor }) {
   return (
     <Canvas
       orthographic
@@ -39,7 +40,7 @@ export default function GameCanvas() {
       <directionalLight position={[-14, 10, -18]} intensity={0.6} />
 
       <CameraRig />
-      <Ground />
+      <Ground executor={executor} />
       <HoverHighlight />
       <PlacedObjects />
       <SelectionOutline />

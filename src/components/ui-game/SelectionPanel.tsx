@@ -1,29 +1,33 @@
 "use client";
 
-import { Move, Trash2, X } from "lucide-react";
+import { Move, Trash2, User, X } from "lucide-react";
 
-import { CATEGORY_LABELS, getObjectType } from "@/lib/catalog";
+import { useWorldMutations } from "@/hooks/useWorldMutations";
+import { CATEGORY_LABELS } from "@/lib/categories";
 import { rotatedFootprint } from "@/lib/grid";
 import { useGameStore } from "@/store/useGameStore";
-import { useWorldStore } from "@/store/useWorldStore";
+import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 
 /** Seçili nesnenin künyesi ve eylemleri. `navigate` modunda görünür. */
 export function SelectionPanel() {
   const mode = useGameStore((state) => state.mode);
   const selectedObjectId = useGameStore((state) => state.selectedObjectId);
+  const userId = useWorldStore((state) => state.userId);
   const object = useWorldStore((state) =>
     state.objects.find((candidate) => candidate.id === selectedObjectId),
   );
+  const mutations = useWorldMutations();
 
   const type = getObjectType(object?.type_id ?? null);
   if (!object || !type || mode !== "navigate") return null;
 
+  const isMine = object.owner_id === userId;
   const { w, h } = rotatedFootprint(type.width, type.height, object.rotation);
+  const refund = Math.floor(type.cost * type.refund_rate);
 
   const handleRemove = () => {
-    useWorldStore.getState().removeObject(object.id);
+    mutations.remove(object.id);
     useGameStore.getState().selectObject(null);
-    useGameStore.getState().notify("Nesne kaldırıldı", "success");
   };
 
   return (
@@ -61,24 +65,32 @@ export function SelectionPanel() {
         {type.population_capacity > 0 && <Row label="Nüfus">{type.population_capacity}</Row>}
       </dl>
 
-      <div className="flex gap-2 border-t border-white/10 px-4 py-3">
-        <button
-          type="button"
-          onClick={() => useGameStore.getState().startMoving(object.id)}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-500/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-400"
-        >
-          <Move className="size-3.5" />
-          Taşı
-        </button>
-        <button
-          type="button"
-          onClick={handleRemove}
-          className="flex items-center justify-center gap-1.5 rounded-lg bg-rose-500/85 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-400"
-        >
-          <Trash2 className="size-3.5" />
-          Kaldır
-        </button>
-      </div>
+      {isMine ? (
+        <div className="flex gap-2 border-t border-white/10 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => useGameStore.getState().startMoving(object.id)}
+            className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-sky-500/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-sky-400"
+          >
+            <Move className="size-3.5" />
+            Taşı
+          </button>
+          <button
+            type="button"
+            onClick={handleRemove}
+            title={`${refund.toLocaleString("tr-TR")} altın iade edilir`}
+            className="flex items-center justify-center gap-1.5 rounded-lg bg-rose-500/85 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-400"
+          >
+            <Trash2 className="size-3.5" />
+            Kaldır
+          </button>
+        </div>
+      ) : (
+        <p className="flex items-center gap-2 border-t border-white/10 px-4 py-3 text-xs text-slate-400">
+          <User className="size-3.5" />
+          Komşunun binası — düzenleyemezsin
+        </p>
+      )}
     </section>
   );
 }

@@ -1,13 +1,14 @@
 import { CELL_COUNT, cellIndex, footprintCells, footprintOrigin, rotatedFootprint } from "@/lib/grid";
-import type { GridCell, ObjectType, PlacedObject } from "@/types/game";
+import type { GridCell, ObjectType, WorldObject } from "@/types/game";
 
 /**
  * Doluluk haritası: hücre başına 1 tamsayı.
  *   0  -> boş
  *   n  -> `objects[n - 1]` bu hücreyi kaplıyor
  *
- * Nesne listesi üzerinde döngü kurmak yerine sabit maliyetli arama yapmak için var.
- * Yalnızca mutasyonlarda yeniden kurulur (O(nesne sayısı)), okuma O(1).
+ * Yalnızca sunucudan yeni liste geldiğinde kurulur (O(nesne sayısı)); okuma O(1).
+ * Bu harita istemci tarafı ÖN kontrol içindir — son sözü `placed_objects`
+ * üzerindeki EXCLUDE kısıtı söyler.
  */
 export type Occupancy = Int32Array;
 
@@ -15,7 +16,7 @@ export const EMPTY_OCCUPANCY: Occupancy = new Int32Array(CELL_COUNT);
 
 /** Yerleştirilmiş nesnelerden doluluk haritasını sıfırdan kurar. */
 export function buildOccupancy(
-  objects: readonly PlacedObject[],
+  objects: readonly WorldObject[],
   typesById: ReadonlyMap<string, ObjectType>,
 ): Occupancy {
   const grid = new Int32Array(CELL_COUNT);
@@ -31,7 +32,7 @@ export function buildOccupancy(
 }
 
 /** Tek bir yerleştirilmiş nesnenin kapladığı hücreler. */
-export function occupiedCells(object: PlacedObject, type: ObjectType): number[] {
+export function occupiedCells(object: WorldObject, type: ObjectType): number[] {
   const { w, h } = rotatedFootprint(type.width, type.height, object.rotation);
   return footprintCells({ x: object.local_x, y: object.local_y }, w, h);
 }
@@ -62,7 +63,7 @@ export function objectIndexAt(occupancy: Occupancy, cell: GridCell): number {
 export function planFootprint(
   cursor: GridCell,
   type: ObjectType,
-  rotation: PlacedObject["rotation"],
+  rotation: number,
 ): { origin: GridCell; w: number; h: number; cells: number[] } {
   const { w, h } = rotatedFootprint(type.width, type.height, rotation);
   const origin = footprintOrigin(cursor, w, h);

@@ -1,11 +1,10 @@
 import { create } from "zustand";
 
-import { getObjectType } from "@/lib/catalog";
 import { errorMessage, type GameErrorCode } from "@/lib/errors";
 import { originToCursor, rotatedFootprint, stepRotation } from "@/lib/grid";
 import { evaluatePlacement, type PlacementPlan } from "@/lib/placement";
-import { useWorldStore } from "@/store/useWorldStore";
-import type { GridCell, Mode, Rotation } from "@/types/game";
+import { getObjectType, useWorldStore } from "@/store/useWorldStore";
+import { asRotation, type GridCell, type Mode, type Rotation } from "@/types/game";
 
 /** Kısa ömürlü kullanıcı bildirimi (ekranın alt ortasında belirir). */
 export interface Notice {
@@ -15,11 +14,20 @@ export interface Notice {
 }
 
 /**
+ * Ghost'u işleyecek mutasyonlar. Store'un kendisi ağa çıkmaz; niyeti hesaplar,
+ * çağıran bileşen `useWorldMutations()` ile gelen işleyiciyi verir.
+ */
+export interface GhostExecutor {
+  place: (typeId: string, origin: GridCell, rotation: Rotation) => void;
+  move: (objectId: string, origin: GridCell, rotation: Rotation) => void;
+}
+
+/**
  * Oyun arayüz durumu. Brief madde 8'de istenen alanlar birebir burada.
  *
- * `ghostValid` / `ghostReason` aslında `ghostPlan`'in türevidir; üçü de her zaman
- * tek bir `set()` içinde birlikte yazılır, dolayısıyla ayrışma riski yok. Ayrı
- * tutulmalarının sebebi bileşenlerin yalnızca ihtiyaç duydukları alana abone olabilmesi.
+ * `ghostValid` / `ghostReason` `ghostPlan`'in türevidir; üçü de her zaman tek bir
+ * `set()` içinde birlikte yazılır. Ayrı tutulmalarının sebebi bileşenlerin
+ * yalnızca ihtiyaç duydukları alana abone olabilmesi.
  */
 interface GameUiState {
   mode: Mode;
@@ -39,7 +47,7 @@ interface GameUiState {
   startMoving: (objectId: string) => void;
   setGhostPosition: (cell: GridCell | null) => void;
   rotateGhost: (dir: 1 | -1) => void;
-  commitGhost: () => void;
+  commitGhost: (executor: GhostExecutor) => void;
   selectObject: (objectId: string | null) => void;
   cancel: () => void;
   notify: (text: string, tone: Notice["tone"]) => void;
@@ -58,7 +66,9 @@ type GhostInputs = Pick<
 
 /**
  * Ghost'u yeniden değerlendirir. Mod, hücre veya rotasyon değiştiğinde çağrılır.
- * Dünya durumunu `getState()` ile okur — abonelik kurmaz, ekstra render tetiklemez.
+ *
+ * Bu yalnızca ANLIK GÖRSEL geri bildirimdir. Aynı kontroller `place_object` /
+ * `move_object` fonksiyonlarında tekrarlanır ve son sözü sunucu söyler.
  */
 function evaluate(state: GhostInputs, cursor: GridCell | null) {
   if (!cursor || state.mode === "navigate") return clearedPlan(cursor);
@@ -75,8 +85,8 @@ function evaluate(state: GhostInputs, cursor: GridCell | null) {
     rotation: state.ghostRotation,
     occupancy: world.occupancy,
     ignoreIndex: moving ? world.objectIndexById(moving.id) : -1,
-    coins: world.player.coins,
-    level: world.player.level,
+    coins: world.profile?.coins ?? 0,
+    level: world.profile?.level ?? 1,
     chargeCost: state.mode === "place",
   });
 
@@ -107,16 +117,18 @@ export const useGameStore = create<GameUiState>((set, get) => ({
   },
 
   startMoving: (objectId) => {
-    const object = useWorldStore.getState().objectById(objectId);
+    const world = useWorldStore.getState();
+    const object = world.objectById(objectId);
     const type = getObjectType(object?.type_id ?? null);
     if (!object || !type) return;
 
-    const { w, h } = rotatedFootprint(type.width, type.height, object.rotation);
+    const rotation = asRotation(object.rotation);
+    const { w, h } = rotatedFootprint(type.width, type.height, rotation);
     const base: GhostInputs = {
       mode: "move",
       placingTypeId: null,
       selectedObjectId: objectId,
-      ghostRotation: object.rotation,
+      ghostRotation: rotation,
     };
     // Ghost'u nesnenin mevcut yerinde başlat ki fare oynayana kadar ortada dursun.
     const cursor = originToCursor({ x: object.local_x, y: object.local_y }, w, h);
@@ -139,7 +151,7 @@ export const useGameStore = create<GameUiState>((set, get) => ({
     set({ ghostRotation, ...evaluate({ ...state, ghostRotation }, state.ghostPosition) });
   },
 
-  commitGhost: () => {
+  commitGhost: (executor) => {
     const state = get();
     const plan = state.ghostPlan;
     if (!plan) return;
@@ -149,21 +161,15 @@ export const useGameStore = create<GameUiState>((set, get) => ({
       return;
     }
 
-    const world = useWorldStore.getState();
-
     if (state.mode === "place" && state.placingTypeId) {
-      if (!world.placeObject(state.placingTypeId, plan.origin, state.ghostRotation)) {
-        state.notify(errorMessage("insufficient_funds"), "error");
-        return;
-      }
+      executor.place(state.placingTypeId, plan.origin, state.ghostRotation);
       // Zincirleme inşaat için modda kalıyoruz; çıkış Escape ile.
       set(evaluate(get(), state.ghostPosition));
       return;
     }
 
     if (state.mode === "move" && state.selectedObjectId) {
-      world.moveObject(state.selectedObjectId, plan.origin, state.ghostRotation);
-      state.notify("Taşındı", "success");
+      executor.move(state.selectedObjectId, plan.origin, state.ghostRotation);
       set({ mode: "navigate", ...clearedPlan(state.ghostPosition) });
     }
   },

@@ -1,17 +1,15 @@
 /**
- * Faz 0 matematik doğrulaması — `npm run verify`
+ * Grid ve yerleştirme matematiği doğrulaması — `npm run verify`
  *
- * Grid dönüşümleri, çok hücreli ayak izi, rotasyon ve çarpışma mantığı tarayıcı
- * açmadan burada sınanır. Faz 1'de aynı senaryolar pgTAP ile veritabanı tarafında
- * tekrarlanacak; bu dosya istemci tarafındaki ön kontrolün referansı olarak kalacak.
+ * Yalnızca saf fonksiyonları sınar; veritabanı veya tarayıcı gerekmez.
+ * Sunucu tarafındaki karşılığı `scripts/db-contract-test.mjs` ile ayrıca test edilir.
  */
 import { buildOccupancy, occupiedCells } from "@/lib/collision";
-import { TYPES_BY_ID } from "@/lib/catalog";
 import {
   GRID_SIZE,
   cellToWorld,
-  footprintCenterWorld,
   footprintCells,
+  footprintCenterWorld,
   footprintOrigin,
   originToCursor,
   rotatedFootprint,
@@ -19,7 +17,7 @@ import {
   worldToCell,
 } from "@/lib/grid";
 import { evaluatePlacement } from "@/lib/placement";
-import type { PlacedObject } from "@/types/game";
+import type { ObjectType, WorldObject } from "@/types/game";
 
 let failures = 0;
 
@@ -31,6 +29,40 @@ function check(name: string, condition: boolean) {
     console.error(`  FAIL ${name}`);
   }
 }
+
+/** Test sabiti — katalog artık veritabanında olduğu için burada fixture kuruyoruz. */
+function makeType(overrides: Partial<ObjectType> & Pick<ObjectType, "id" | "width" | "height">): ObjectType {
+  return {
+    category: "production",
+    name: overrides.id,
+    model_key: overrides.id,
+    cost: 100,
+    build_seconds: 0,
+    produce_seconds: null,
+    input_item_id: null,
+    input_qty: null,
+    output_item_id: null,
+    output_qty: null,
+    worker_slots: 0,
+    population_capacity: 0,
+    maintenance_per_hour: 0,
+    level_required: 1,
+    refund_rate: 0.5,
+    xp_reward: 10,
+    color: "#ffffff",
+    block_height: 1,
+    sort_order: 0,
+    is_active: true,
+    ...overrides,
+  };
+}
+
+const QUARRY = makeType({ id: "quarry", width: 3, height: 2, cost: 520, level_required: 3 });
+const TOWN_HALL = makeType({ id: "town_hall", width: 4, height: 4, cost: 2500, level_required: 6 });
+const TYPES = new Map<string, ObjectType>([
+  [QUARRY.id, QUARRY],
+  [TOWN_HALL.id, TOWN_HALL],
+]);
 
 console.log("\n1) Dünya <-> hücre dönüşümü");
 {
@@ -78,57 +110,38 @@ console.log("\n3) Ayak izi (imlece ortalanmış)");
 
 console.log("\n4) Çarpışma ve doluluk haritası");
 {
-  const field: PlacedObject = { id: "a", type_id: "quarry", local_x: 5, local_y: 5, rotation: 0, state: "idle" };
-  const occupancy = buildOccupancy([field], TYPES_BY_ID);
-  const type = TYPES_BY_ID.get("quarry")!;
+  const field: WorldObject = {
+    id: "a", owner_id: "u", type_id: "quarry",
+    local_x: 5, local_y: 5, rotation: 0, state: "idle", state_since: "",
+  };
+  const occupancy = buildOccupancy([field], TYPES);
 
-  check("taş ocağı 3x2 = 6 hücre", occupiedCells(field, type).length === 6);
+  check("taş ocağı 3x2 = 6 hücre", occupiedCells(field, QUARRY).length === 6);
   check("dolu hücre sayısı 6", occupancy.reduce((sum, v) => sum + (v > 0 ? 1 : 0), 0) === 6);
 
   const wallet = { coins: 99999, level: 9 };
+  const at = (x: number, y: number, rotation: 0 | 90 = 0, extra = {}) =>
+    evaluatePlacement({ type: QUARRY, cursor: { x, y }, rotation, occupancy, ...wallet, ...extra });
 
-  const overlap = evaluatePlacement({ type, cursor: { x: 6, y: 6 }, rotation: 0, occupancy, ...wallet });
-  check("üst üste yerleştirme reddedildi", !overlap.valid && overlap.reason === "cell_occupied");
-
-  const beside = evaluatePlacement({ type, cursor: { x: 6, y: 8 }, rotation: 0, occupancy, ...wallet });
-  check("bitişik hücreye yerleştirme kabul edildi", beside.valid);
-
-  const rotatedOverlap = evaluatePlacement({ type, cursor: { x: 6, y: 7 }, rotation: 90, occupancy, ...wallet });
-  check("90° döndürülmüş hâli çakışmayı yakalar", !rotatedOverlap.valid);
-
-  const edge = evaluatePlacement({ type, cursor: { x: 19, y: 19 }, rotation: 0, occupancy, ...wallet });
-  check("grid dışına taşma reddedildi", !edge.valid && edge.reason === "out_of_bounds");
-
-  const selfMove = evaluatePlacement({
-    type, cursor: { x: 7, y: 6 }, rotation: 0, occupancy, ignoreIndex: 0, ...wallet,
-  });
-  check("kendi üzerine kayan taşıma serbest", selfMove.valid);
-
-  const blockedMove = evaluatePlacement({
-    type, cursor: { x: 6, y: 6 }, rotation: 0, occupancy, ignoreIndex: 1, ...wallet,
-  });
-  check("başkasının indeksiyle taşıma engellenir", !blockedMove.valid);
+  check("üst üste yerleştirme reddedildi", at(6, 6).reason === "cell_occupied");
+  check("bitişik hücreye yerleştirme kabul edildi", at(6, 8).valid);
+  check("90° döndürülmüş hâli çakışmayı yakalar", !at(6, 7, 90).valid);
+  check("grid dışına taşma reddedildi", at(19, 19).reason === "out_of_bounds");
+  check("kendi üzerine kayan taşıma serbest", at(7, 6, 0, { ignoreIndex: 0 }).valid);
+  check("başkasının indeksiyle taşıma engellenir", !at(6, 6, 0, { ignoreIndex: 1 }).valid);
 }
 
 console.log("\n5) Ekonomi ve seviye kapıları");
 {
-  const occupancy = buildOccupancy([], TYPES_BY_ID);
-  const townHall = TYPES_BY_ID.get("town_hall")!;
+  const occupancy = buildOccupancy([], TYPES);
+  const at = (coins: number, level: number, chargeCost = true) =>
+    evaluatePlacement({
+      type: TOWN_HALL, cursor: { x: 10, y: 10 }, rotation: 0, occupancy, coins, level, chargeCost,
+    });
 
-  const poor = evaluatePlacement({
-    type: townHall, cursor: { x: 10, y: 10 }, rotation: 0, occupancy, coins: 10, level: 9,
-  });
-  check("parası yetmeyen reddedildi", !poor.valid && poor.reason === "insufficient_funds");
-
-  const lowLevel = evaluatePlacement({
-    type: townHall, cursor: { x: 10, y: 10 }, rotation: 0, occupancy, coins: 999999, level: 1,
-  });
-  check("seviyesi yetmeyen reddedildi", !lowLevel.valid && lowLevel.reason === "level_required");
-
-  const free = evaluatePlacement({
-    type: townHall, cursor: { x: 10, y: 10 }, rotation: 0, occupancy, coins: 0, level: 9, chargeCost: false,
-  });
-  check("taşımada maliyet aranmaz", free.valid);
+  check("parası yetmeyen reddedildi", at(10, 9).reason === "insufficient_funds");
+  check("seviyesi yetmeyen reddedildi", at(999999, 1).reason === "level_required");
+  check("taşımada maliyet aranmaz", at(0, 9, false).valid);
 }
 
 console.log(failures === 0 ? "\nTüm kontroller geçti.\n" : `\n${failures} kontrol başarısız.\n`);

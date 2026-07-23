@@ -1,10 +1,9 @@
 "use client";
 
-import { getObjectType } from "@/lib/catalog";
 import { CELL_SIZE, footprintCenterWorld, rotatedFootprint } from "@/lib/grid";
 import { selectionMaterial, unitBoxEdgesGeometry } from "@/lib/three-assets";
 import { useGameStore } from "@/store/useGameStore";
-import { useWorldStore } from "@/store/useWorldStore";
+import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 
 /** Seçili nesnenin çevresine sarı tel kafes çizer. */
 export function SelectionOutline() {

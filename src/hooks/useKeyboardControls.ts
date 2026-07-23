@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import type { WorldMutations } from "@/hooks/useWorldMutations";
 import { useGameStore } from "@/store/useGameStore";
 import { useWorldStore } from "@/store/useWorldStore";
 
@@ -20,9 +21,9 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * Global klavye kısayolları.
  *   Q / E      → ghost'u 90° döndür
  *   Escape     → moddan çık, seçimi temizle
- *   Delete     → seçili nesneyi kaldır
+ *   Delete     → seçili nesneyi kaldır (yalnızca kendi binan)
  */
-export function useKeyboardControls() {
+export function useKeyboardControls(mutations: WorldMutations) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
@@ -42,10 +43,16 @@ export function useKeyboardControls() {
         case "delete":
         case "backspace": {
           if (game.mode !== "navigate" || !game.selectedObjectId) return;
+          const world = useWorldStore.getState();
+          const target = world.objectById(game.selectedObjectId);
+          if (!target) return;
           event.preventDefault();
-          useWorldStore.getState().removeObject(game.selectedObjectId);
+          if (target.owner_id !== world.userId) {
+            game.notify("Bu nesne sana ait değil", "error");
+            return;
+          }
+          mutations.remove(target.id);
           game.selectObject(null);
-          game.notify("Nesne kaldırıldı", "success");
           break;
         }
         default:
@@ -55,5 +62,5 @@ export function useKeyboardControls() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [mutations]);
 }

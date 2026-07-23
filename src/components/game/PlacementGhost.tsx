@@ -1,6 +1,5 @@
 "use client";
 
-import { getObjectType } from "@/lib/catalog";
 import { CELL_SIZE, footprintCenterWorld } from "@/lib/grid";
 import {
   ghostInvalidMaterial,
@@ -9,7 +8,7 @@ import {
   unitTileGeometry,
 } from "@/lib/three-assets";
 import { useGameStore } from "@/store/useGameStore";
-import { useWorldStore } from "@/store/useWorldStore";
+import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 
 /** Bina gövdesi hücreyi tam doldurmaz; komşu binalar arasında ince bir boşluk kalsın. */
 const BODY_INSET = 0.92;

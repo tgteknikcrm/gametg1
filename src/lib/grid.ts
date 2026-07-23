@@ -40,11 +40,15 @@ export function worldToCell(wx: number, wz: number): GridCell | null {
   return isInsideGrid(x, y) ? { x, y } : null;
 }
 
-/** Rotasyon uygulanmış ayak izi ölçüsü. 90/270'te genişlik ve derinlik yer değiştirir. */
+/**
+ * Rotasyon uygulanmış ayak izi ölçüsü. 90/270'te genişlik ve derinlik yer değiştirir.
+ * Sunucudan gelen `rotation` düz `number` olduğu için imza daraltılmadı;
+ * aynı hesap `public.rotated_footprint` fonksiyonunda da var.
+ */
 export function rotatedFootprint(
   width: number,
   height: number,
-  rotation: Rotation,
+  rotation: number,
 ): { w: number; h: number } {
   return rotation === 90 || rotation === 270
     ? { w: height, h: width }

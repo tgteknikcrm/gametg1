@@ -63,22 +63,45 @@ Sırayla ilerle, her fazın sonunda kullanıcının onayını bekle.
 | Faz | Kapsam | Durum |
 |-----|--------|-------|
 | 0 | İstemci iskeleti, veritabanı yok | ✅ tamamlandı |
-| 1 | Kalıcılık: Auth, şema, `place_object`/`remove_object` RPC'leri | beklemede |
-| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı, XP | beklemede |
+| 1 | Kalıcılık: Auth, şema, `place_object`/`move_object`/`remove_object` | ✅ tamamlandı |
+| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı, XP | sırada |
 | 3 | Arsa ve şehir: halka parselleri, mesafe fiyatlaması, satın alma | beklemede |
 | 4 | İşgücü: nüfus havuzu, işçi ataması, ücretler | beklemede |
 | 5 | Avatar gelişimi: enerji, eğitim/kültür/spor, istatistik bonusları | beklemede |
 | 6 | Oyuncu ticareti: emir defteri; NPC fiyatları taban ve tavan | beklemede |
 | 7 | Siyaset: partiler, seçimler, hazine, vergi oranları | beklemede |
 
-## Faz 0'dan devralınan geçici çözümler
+## Veritabanı sözleşmesi (Faz 1)
 
-Bunlar Faz 1'de kaldırılacak, dosyaların başında da not edildi:
+RPC'ler `supabase/migrations/0003_functions.sql` içinde. Fırlattıkları exception
+adları `src/lib/errors.ts`'teki `GameErrorCode` ile **birebir aynıdır** — yeni bir
+hata kodu eklerken ikisini birlikte güncelle.
 
-- `src/lib/catalog.ts` — `object_types` tablosunun elle yazılmış aynası
-- `src/store/useWorldStore.ts` — sunucu durumunun bellek içi yerine geçeni
-- `src/lib/placement.ts` — istemci tarafı doğrulama; sunucuda tekrarlanacak
-- `src/types/game.ts` — `supabase gen types` çıktısıyla değiştirilecek
+| RPC | İmza | Notlar |
+|-----|------|--------|
+| `place_object` | `(p_type_id text, p_x int, p_y int, p_rotation int)` | maliyet, ayak izi, XP sunucuda hesaplanır |
+| `move_object` | `(p_object_id uuid, p_x int, p_y int, p_rotation int)` | ücretsiz, sahiplik kontrolü var |
+| `remove_object` | `(p_object_id uuid) → bigint` | iade tutarını döner |
+
+Çakışmayı uygulama değil veritabanı engeller:
+
+```sql
+exclude using gist (parcel_id with =, footprint with &&)
+```
+
+`footprint` üretilmiş bir `box` kolonudur, kenarlardan 0.1 içeri çekilmiştir
+(bitişik binalar çakışıyor sayılmasın diye). Bu kısıt sayesinde iki sekmenin aynı
+anda aynı hücreye inşa etmesi imkânsız — `npm run test:db` bunu 8 eşzamanlı
+istekle sınıyor.
+
+## Faz 1'de kalan geçici çözümler
+
+- `GRID_SIZE` istemcide sabit 20. Sunucudaki parsel ölçüsüyle uyuşmazsa
+  `useWorldSync` konsola uyarı basar. Faz 3'te parselden okunacak.
+- Şehirde tek paylaşılan ring-0 parseli var; parsel sahipliği Faz 3'te gelecek.
+- `state` alanı yazılıyor ama ilerlemiyor — zaman durum makinesi Faz 2'de.
+- Komşuların yeni binaları ancak yeniden çekimde görünür; Realtime bildirimleri
+  Faz 4'te eklenecek.
 
 ## Komutlar
 
@@ -87,5 +110,13 @@ npm run dev        # geliştirme sunucusu
 npm run build      # üretim derlemesi
 npm run typecheck  # tsc --noEmit
 npm run lint       # eslint
-npm run verify     # grid/çarpışma matematiği doğrulaması
+npm run verify     # grid/çarpışma matematiği (veritabanı gerekmez)
+npm run test:db    # RPC sözleşmesi, RLS, sahiplik, yarış testi
+npm run gen:types  # şemadan TypeScript tipleri
 ```
+
+## Sır yönetimi
+
+- `.env.local` ve `.env*` gitignore'da. Depoya asla anahtar girmez.
+- İstemci yalnızca **anon** anahtarı kullanır; `service_role` hiçbir yerde geçmez.
+- `SUPABASE_ACCESS_TOKEN` sadece `npm run gen:types` için, ortam değişkeninden okunur.
