@@ -4,9 +4,13 @@ import { buildOccupancy, EMPTY_OCCUPANCY, type Occupancy } from "@/lib/collision
 import type {
   InventoryRow,
   Item,
+  ObjectLevel,
+  ObjectLevelCost,
   ObjectType,
   Parcel,
   Profile,
+  StorageClass,
+  StorageStatus,
   WorldObject,
 } from "@/types/game";
 
@@ -33,13 +37,24 @@ interface WorldState {
   parcel: Parcel | null;
   userId: string | null;
 
+  /** "type_id:level" -> o seviyedeki değerler ve o seviyeye çıkma bedeli. */
+  levels: Map<string, ObjectLevel>;
+  /** "type_id:level" -> o seviyeye çıkmak için gereken malzemeler. */
+  levelCosts: Map<string, ObjectLevelCost[]>;
+  storage: Map<StorageClass, { stored: number; capacity: number }>;
+
   setCatalog: (catalog: ObjectType[]) => void;
   setItems: (items: Item[]) => void;
   setObjects: (objects: WorldObject[]) => void;
   setInventory: (rows: InventoryRow[]) => void;
+  setLevels: (data: { levels: ObjectLevel[]; costs: ObjectLevelCost[] }) => void;
+  setStorage: (rows: StorageStatus[]) => void;
   setProfile: (profile: Profile | null) => void;
   setParcel: (parcel: Parcel | null) => void;
   setUserId: (userId: string | null) => void;
+
+  levelOf: (typeId: string, level: number) => ObjectLevel | null;
+  costsOf: (typeId: string, level: number) => ObjectLevelCost[];
 
   objectById: (objectId: string | null) => WorldObject | null;
   objectIndexById: (objectId: string | null) => number;
@@ -59,6 +74,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   profile: null,
   parcel: null,
   userId: null,
+  levels: new Map(),
+  levelCosts: new Map(),
+  storage: new Map(),
 
   setCatalog: (catalog) => {
     const typesById = new Map(catalog.map((type) => [type.id, type]));
@@ -77,6 +95,28 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   setInventory: (rows) => set({ inventory: new Map(rows.map((r) => [r.item_id, r.quantity])) }),
 
+  setLevels: ({ levels, costs }) => {
+    const byKey = new Map(levels.map((row) => [`${row.type_id}:${row.level}`, row]));
+    const costMap = new Map<string, ObjectLevelCost[]>();
+    for (const cost of costs) {
+      const key = `${cost.type_id}:${cost.level}`;
+      const list = costMap.get(key);
+      if (list) list.push(cost);
+      else costMap.set(key, [cost]);
+    }
+    set({ levels: byKey, levelCosts: costMap });
+  },
+
+  setStorage: (rows) =>
+    set({
+      storage: new Map(
+        rows.map((row) => [
+          row.storage_class as StorageClass,
+          { stored: row.stored ?? 0, capacity: row.capacity ?? 0 },
+        ]),
+      ),
+    }),
+
   setProfile: (profile) => set({ profile }),
   setParcel: (parcel) => set({ parcel }),
   setUserId: (userId) => set({ userId }),
@@ -93,6 +133,9 @@ export const useWorldStore = create<WorldState>((set, get) => ({
   },
 
   quantityOf: (itemId) => (itemId ? (get().inventory.get(itemId) ?? 0) : 0),
+
+  levelOf: (typeId, level) => get().levels.get(`${typeId}:${level}`) ?? null,
+  costsOf: (typeId, level) => get().levelCosts.get(`${typeId}:${level}`) ?? [],
 }));
 
 /** Senkron katalog araması — sahne bileşenleri ve ghost değerlendirmesi kullanır. */

@@ -39,10 +39,21 @@ function optimisticObject(
     state: isBuilding ? "building" : "idle",
     state_since: now.toISOString(),
     last_collected_at: null,
+    state_duration: buildSeconds,
     // Sunucu yanıtını beklemeden geri sayım başlasın.
     effective_state: isBuilding ? "building" : "idle",
     finishes_at: isBuilding ? new Date(now.getTime() + buildSeconds * 1000).toISOString() : null,
     remaining_seconds: isBuilding ? buildSeconds : 0,
+    level: 1,
+    pending_level: null,
+    effective_level: 1,
+    // Üretim inşaat bitince başlar; sunucu tazelemesi gerçek değerleri getirir.
+    cycle_seconds: type?.produce_seconds ?? null,
+    cycle_output: type?.output_qty ?? null,
+    cycle_input: type?.input_qty ?? null,
+    pending_cycles: 0,
+    pending_qty: 0,
+    cycle_remaining_seconds: type?.produce_seconds ?? null,
   };
 }
 

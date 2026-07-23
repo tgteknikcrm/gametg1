@@ -10,6 +10,7 @@ import { HarvestAllButton } from "@/components/ui-game/HarvestAllButton";
 import { InventoryPanel } from "@/components/ui-game/InventoryPanel";
 import { ModeHint } from "@/components/ui-game/ModeHint";
 import { NoticeToast } from "@/components/ui-game/NoticeToast";
+import { ResourceBar } from "@/components/ui-game/ResourceBar";
 import { SelectionPanel } from "@/components/ui-game/SelectionPanel";
 import { TopBar } from "@/components/ui-game/TopBar";
 import { useDevBridge } from "@/hooks/useDevBridge";
@@ -33,7 +34,7 @@ export function GameShell() {
   const production = useProductionMutations();
 
   useKeyboardControls(mutations);
-  useProductionClock();
+  useProductionClock(production);
   useDevBridge(mutations, production);
 
   return (
@@ -53,6 +54,7 @@ export function GameShell() {
         style={{ background: "radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(15,26,46,0.28) 100%)" }}
       />
 
+      <ResourceBar />
       <TopBar />
       <HarvestAllButton />
       <BuildSidebar />

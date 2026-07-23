@@ -1,12 +1,11 @@
 /**
- * Faz 2 üretim sözleşmesi testi — `npm run test:production`
+ * Faz 2.5 üretim sözleşmesi testi — `npm run test:production`
  *
- * Zaman geçişini beklemek yerine `state_since`'i geriye alarak ileri sarar.
- * Bu, yönetim API'si (SUPABASE_ACCESS_TOKEN) gerektirir:
+ * Sürekli üretim, bina seviyeleri, depo kapasitesi ve elmas.
+ * Zamanı beklemek yerine `produced_since`/`state_since`'i geriye alarak ileri
+ * sarar; bu yüzden yönetim API'si gerekir:
  *
  *   $env:SUPABASE_ACCESS_TOKEN="sbp_..."; $env:SUPABASE_PROJECT_REF="abc"; npm run test:production
- *
- * Anon anahtarla çalışan diğer testler için: npm run test:db
  */
 import { readFileSync } from "node:fs";
 
@@ -72,15 +71,20 @@ const signUp = async (email) => {
 
 const stamp = Date.now().toString(36);
 const A = await signUp(`prod-${stamp}@ornek.test`);
-const profile = () => call(`/rest/v1/profiles?id=eq.${A.id}&select=coins,xp,level`, { token: A.token }).then((r) => r.data[0]);
-const inventory = () => call(`/rest/v1/inventory?user_id=eq.${A.id}&select=item_id,quantity`, { token: A.token }).then((r) => r.data);
-const world = () => call(`/rest/v1/world_objects?owner_id=eq.${A.id}&select=*`, { token: A.token }).then((r) => r.data);
-const forward = (id, seconds) =>
-  sql(`update public.placed_objects set state_since = state_since - make_interval(secs => ${seconds}) where id = '${id}';`);
+const T = A.token;
+const profile = () => call(`/rest/v1/profiles?id=eq.${A.id}&select=coins,gems,xp,level`, { token: T }).then((r) => r.data[0]);
+const inventory = () => call(`/rest/v1/inventory?user_id=eq.${A.id}&select=item_id,quantity`, { token: T }).then((r) => r.data);
+const world = () => call(`/rest/v1/world_objects?owner_id=eq.${A.id}&select=*`, { token: T }).then((r) => r.data);
+const storage = () => call(`/rest/v1/storage_status?select=*`, { token: T }).then((r) => r.data);
+const forward = (id, seconds) => sql(`
+  update public.placed_objects
+     set state_since = state_since - make_interval(secs => ${seconds}),
+         produced_since = produced_since - make_interval(secs => ${seconds})
+   where id = '${id}';`);
 
 /** Grid'de boş bir köşe bul — test tekrar tekrar çalıştırılabilir olsun. */
 async function freeSpot(size = 3) {
-  const { data } = await call(`/rest/v1/placed_objects?select=local_x,local_y,footprint_w,footprint_h`, { token: A.token });
+  const { data } = await call(`/rest/v1/placed_objects?select=local_x,local_y,footprint_w,footprint_h`, { token: T });
   const taken = new Set();
   for (const o of data ?? []) {
     for (let dx = 0; dx < o.footprint_w; dx++) {
@@ -99,95 +103,128 @@ async function freeSpot(size = 3) {
   throw new Error("şehirde boş yer yok");
 }
 
-console.log("\n1) İnşaat süresi uygulanıyor");
+console.log("\n1) Başlangıç ve yerleştirme");
+check("elmasla başlıyor", (await profile()).gems > 0, String((await profile()).gems));
+
 const spot = await freeSpot(3);
-const placed = await rpc("place_object", { p_type_id: "wheat_field", p_x: spot.x, p_y: spot.y, p_rotation: 0 }, A.token);
+const placed = await rpc("place_object", { p_type_id: "wheat_field", p_x: spot.x, p_y: spot.y, p_rotation: 0 }, T);
 const id = placed.data.id;
-check("durum 'building'", placed.data.state === "building", placed.data.state);
+check("seviye 1", placed.data.level === 1);
+check("state_duration inşaat süresi", placed.data.state_duration === 20, String(placed.data.state_duration));
+check("üretim penceresi açıldı", !!placed.data.produced_since);
 
-let view = (await world()).find((o) => o.id === id);
-check("görünüm 'building' diyor", view.effective_state === "building");
-check("kalan süre sunucudan geliyor", view.remaining_seconds > 0, String(view.remaining_seconds));
-check("inşaat bitmeden üretim reddedildi",
-  (await rpc("start_production", { p_object_id: id }, A.token)).data?.message === "still_building");
+let w = (await world()).find((o) => o.id === id);
+check("görünüm 'building'", w.effective_state === "building", w.effective_state);
+check("tur değerleri seviyeden geliyor", w.cycle_seconds === 120 && w.cycle_output === 10,
+  `${w.cycle_seconds}/${w.cycle_output}`);
 
-console.log("\n2) Tembel zaman: cron yok, okuma anında hesaplanıyor");
-await forward(id, 30);
-view = (await world()).find((o) => o.id === id);
-check("etkin durum 'idle'", view.effective_state === "idle", view.effective_state);
-check("saklanan durum hâlâ 'building'", view.state === "building", view.state);
+console.log("\n2) SÜREKLİ ÜRETİM — tıklama yok, tembel hesap");
+await forward(id, 20 + 360);
+w = (await world()).find((o) => o.id === id);
+check("inşaat kendiliğinden bitti", w.effective_state === "idle", w.effective_state);
+check("3 tur birikti", w.pending_cycles === 3, String(w.pending_cycles));
+check("30 buğday bekliyor", w.pending_qty === 30, String(w.pending_qty));
+check("mevcut turun kalanı hesaplanıyor",
+  w.cycle_remaining_seconds > 0 && w.cycle_remaining_seconds <= 120, String(w.cycle_remaining_seconds));
 
-console.log("\n3) Üretim döngüsü");
-check("üretim başladı", (await rpc("start_production", { p_object_id: id }, A.token)).data?.state === "producing");
-check("üretirken tekrar başlatılamaz",
-  (await rpc("start_production", { p_object_id: id }, A.token)).data?.message === "already_producing");
-check("süre dolmadan hasat -> not_ready",
-  (await rpc("harvest_object", { p_object_id: id }, A.token)).data?.message === "not_ready");
+const c1 = await rpc("collect_all", {}, T);
+check("toplama tek çağrıda", c1.data?.[0]?.collected === 30, JSON.stringify(c1.data));
+check("envantere girdi", (await inventory()).find((i) => i.item_id === "wheat")?.quantity === 30);
+w = (await world()).find((o) => o.id === id);
+check("biriken sıfırlandı ama sayaç devam ediyor",
+  w.pending_cycles === 0 && w.cycle_remaining_seconds > 0, JSON.stringify({ c: w.pending_cycles, r: w.cycle_remaining_seconds }));
 
-await forward(id, 130);
-const xpBefore = (await profile()).xp;
-const harvest = await rpc("harvest_object", { p_object_id: id }, A.token);
-check("hasat başarılı", harvest.data?.[0]?.item_id === "wheat" && harvest.data?.[0]?.quantity === 10, JSON.stringify(harvest.data));
-check("envantere girdi", (await inventory()).find((i) => i.item_id === "wheat")?.quantity >= 10);
-check("hasat XP verdi", (await profile()).xp > xpBefore);
-check("boş binadan tekrar hasat edilemez",
-  (await rpc("harvest_object", { p_object_id: id }, A.token)).data?.message === "not_ready");
+console.log("\n3) Depo kapasitesi üretimi sınırlıyor");
+const grain = (await storage()).find((r) => r.storage_class === "grain");
+check("taban kapasite", grain.capacity === 200, JSON.stringify(grain));
+await forward(id, 120 * 40);
+const c2 = await rpc("collect_all", {}, T);
+check("kapasiteye kadar toplandı", c2.data?.[0]?.collected === 170, JSON.stringify(c2.data?.[0]));
+check("depo doldu bayrağı", c2.data?.[0]?.blocked_full === true);
 
-console.log("\n4) NPC pazarı ve fiyat makası");
+await sql(`update public.profiles set coins = 300000, level = 8 where id = '${A.id}';`);
+const gspot = await freeSpot(3);
+const granary = await rpc("place_object", { p_type_id: "granary", p_x: gspot.x, p_y: gspot.y, p_rotation: 0 }, T);
+await forward(granary.data.id, 200);
+check("tahıl ambarı kapasiteyi büyüttü",
+  (await storage()).find((r) => r.storage_class === "grain").capacity === 600,
+  JSON.stringify((await storage()).find((r) => r.storage_class === "grain")));
+
+console.log("\n4) SEVİYE — altın + malzeme + süre");
+await sql(`delete from public.inventory where user_id = '${A.id}' and item_id = 'timber';`);
+check("malzeme yoksa reddedildi",
+  (await rpc("upgrade_object", { p_object_id: id }, T)).data?.message === "missing_materials");
+
+const need = await call(`/rest/v1/object_level_costs?type_id=eq.wheat_field&level=eq.2&select=item_id,quantity`, { token: T });
+for (const c of need.data) await rpc("buy_item", { p_item_id: c.item_id, p_quantity: c.quantity }, T);
+
 const coinsBefore = (await profile()).coins;
-const sold = await rpc("sell_item", { p_item_id: "wheat", p_quantity: 10 }, A.token);
-check("satış geliri sunucudan hesaplandı", sold.data === 10, JSON.stringify(sold.data));
-check("altın arttı", (await profile()).coins === coinsBefore + 10);
-check("olmayan malı satamaz",
-  (await rpc("sell_item", { p_item_id: "wheat", p_quantity: 99 }, A.token)).data?.message === "insufficient_items");
-check("negatif miktar reddedildi",
-  (await rpc("sell_item", { p_item_id: "wheat", p_quantity: -5 }, A.token)).data?.message === "invalid_quantity");
+const up = await rpc("upgrade_object", { p_object_id: id }, T);
+check("yükseltme başladı", up.data?.pending_level === 2, JSON.stringify(up.data).slice(0, 120));
+check("altın düşüldü", (await profile()).coins < coinsBefore);
+check("malzeme tüketildi", ((await inventory()).find((i) => i.item_id === "timber")?.quantity ?? 0) === 0);
 
-const items = await call(`/rest/v1/items?select=id,npc_buy_price,npc_sell_price`, { token: A.token });
-const arbitrage = items.data.filter((i) => i.npc_buy_price >= i.npc_sell_price && i.npc_sell_price > 0);
-check("al-sat arbitrajı yok (para basılamaz)", arbitrage.length === 0, JSON.stringify(arbitrage));
+w = (await world()).find((o) => o.id === id);
+check("yükseltirken 'building'", w.effective_state === "building");
+check("yükseltirken etkin seviye eski", w.effective_level === 1, String(w.effective_level));
+check("yükseltirken üretim durdu", w.pending_cycles === 0, String(w.pending_cycles));
+check("yükseltme sürerken tekrar yükseltilemez",
+  (await rpc("upgrade_object", { p_object_id: id }, T)).data?.message === "still_building");
 
-console.log("\n5) Girdi gerektiren üretim");
-await sql(`update public.profiles set level = 5, coins = 50000 where id = '${A.id}';`);
-const millSpot = await freeSpot(2);
-const mill = await rpc("place_object", { p_type_id: "mill", p_x: millSpot.x, p_y: millSpot.y, p_rotation: 0 }, A.token);
-await forward(mill.data.id, 200);
-check("hammadde yoksa -> missing_input",
-  (await rpc("start_production", { p_object_id: mill.data.id }, A.token)).data?.message === "missing_input");
-await rpc("buy_item", { p_item_id: "wheat", p_quantity: 8 }, A.token);
-check("hammadde alınınca başladı",
-  (await rpc("start_production", { p_object_id: mill.data.id }, A.token)).data?.state === "producing");
-check("hammadde tüketildi", (await inventory()).find((i) => i.item_id === "wheat")?.quantity === 0);
-await forward(mill.data.id, 250);
-check("işlenmiş mal üretildi",
-  (await rpc("harvest_object", { p_object_id: mill.data.id }, A.token)).data?.[0]?.item_id === "flour");
+console.log("\n5) ELMASLA ANINDA BİTİRME");
+const gemsBefore = (await profile()).gems;
+const rush = await rpc("rush_object", { p_object_id: id }, T);
+check("elmas harcandı", rush.status === 200 && rush.data > 0, JSON.stringify(rush.data));
+check("bakiye düştü", (await profile()).gems === gemsBefore - rush.data);
+w = (await world()).find((o) => o.id === id);
+check("yükseltme anında bitti", w.effective_state === "idle" && w.level === 2, `${w.effective_state}/${w.level}`);
+check("seviye 2 daha çok üretiyor", w.cycle_output > 10, String(w.cycle_output));
+check("seviye 2 turu daha kısa", w.cycle_seconds < 120, String(w.cycle_seconds));
+check("bitmiş işte rush reddedildi",
+  (await rpc("rush_object", { p_object_id: id }, T)).data?.message === "nothing_to_rush");
 
-console.log("\n6) Sahiplik");
+console.log("\n6) Zincir tek toplamada ilerliyor");
+await sql(`delete from public.inventory where user_id = '${A.id}';`);
+const mspot = await freeSpot(2);
+const mill = await rpc("place_object", { p_type_id: "mill", p_x: mspot.x, p_y: mspot.y, p_rotation: 0 }, T);
+await forward(mill.data.id, 180 + 240 * 2);
+await forward(id, 3600);
+const c3 = await rpc("collect_all", {}, T);
+check("aynı toplamada hem buğday hem un üretildi",
+  (c3.data?.[0]?.items?.wheat ?? 0) > 0 && (c3.data?.[0]?.items?.flour ?? 0) > 0,
+  JSON.stringify(c3.data?.[0]?.items));
+
+console.log("\n7) Yetki ve fiyat bütünlüğü");
 const B = await signUp(`prod-b-${stamp}@ornek.test`);
-check("başkasının binasını hasat edemez",
-  (await rpc("harvest_object", { p_object_id: id }, B.token)).data?.message === "not_owner");
-check("başkasının binasında üretim başlatamaz",
-  (await rpc("start_production", { p_object_id: id }, B.token)).data?.message === "not_owner");
-const directInv = await call(`/rest/v1/inventory`, {
-  token: A.token, method: "POST", body: { user_id: A.id, item_id: "bread", quantity: 9999 },
-});
-check("envantere doğrudan yazılamıyor", directInv.status >= 400, String(directInv.status));
+check("başkasının binası yükseltilemez",
+  (await rpc("upgrade_object", { p_object_id: id }, B.token)).data?.message === "not_owner");
+check("başkasının binası rush edilemez",
+  (await rpc("rush_object", { p_object_id: id }, B.token)).data?.message === "not_owner");
+check("seviye tablosuna yazılamıyor",
+  (await call(`/rest/v1/object_levels`, { token: T, method: "POST", body: { type_id: "wheat_field", level: 99 } })).status >= 400);
+await call(`/rest/v1/profiles?id=eq.${A.id}`, { token: T, method: "PATCH", body: { gems: 999999 } });
+check("elmas doğrudan artırılamıyor", (await profile()).gems !== 999999);
 check("başkasının envanteri görünmüyor",
   ((await call(`/rest/v1/inventory?user_id=eq.${A.id}&select=*`, { token: B.token })).data?.length ?? 0) === 0);
 
-console.log("\n7) Para defteri");
-const ledger = await call(`/rest/v1/ledger?user_id=eq.${A.id}&select=reason,amount`, { token: A.token });
+const items = await call(`/rest/v1/items?select=id,npc_buy_price,npc_sell_price`, { token: T });
+const arbitrage = items.data.filter((i) => i.npc_buy_price >= i.npc_sell_price && i.npc_sell_price > 0);
+check("al-sat arbitrajı yok (para basılamaz)", arbitrage.length === 0, JSON.stringify(arbitrage));
+
+console.log("\n8) Para defteri");
+const ledger = await call(`/rest/v1/ledger?user_id=eq.${A.id}&select=reason,amount,currency`, { token: T });
 const reasons = new Set(ledger.data.map((l) => l.reason));
 check("inşaat gideri kaydedildi", reasons.has("build"));
-check("satış geliri kaydedildi", reasons.has("npc_sale"));
-check("alım gideri kaydedildi", reasons.has("npc_purchase"));
-check("giderler negatif", ledger.data.filter((l) => l.reason === "build").every((l) => l.amount < 0));
+check("yükseltme gideri kaydedildi", reasons.has("upgrade"));
+check("elmas harcaması ayrı para biriminde",
+  ledger.data.some((l) => l.reason === "rush" && l.currency === "gem"),
+  JSON.stringify(ledger.data.filter((l) => l.reason === "rush")));
 
-console.log("\n8) Temizlik");
+console.log("\n9) Temizlik");
 const mine = await world();
 let removed = 0;
 for (const o of mine) {
-  if ((await rpc("remove_object", { p_object_id: o.id }, A.token)).status === 200) removed++;
+  if ((await rpc("remove_object", { p_object_id: o.id }, T)).status === 200) removed++;
 }
 check("test binaları kaldırıldı", removed === mine.length, `${removed}/${mine.length}`);
 

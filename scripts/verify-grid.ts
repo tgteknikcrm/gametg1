@@ -7,7 +7,16 @@
 import { buildOccupancy, occupiedCells } from "@/lib/collision";
 import { formatDuration, formatDurationLong } from "@/lib/duration";
 import { GameError, isFatalSessionError, toGameErrorCode, toGameErrorMessage } from "@/lib/errors";
-import { isStale, localProgress, localRemainingSeconds, localState } from "@/lib/production";
+import {
+  isStale,
+  localCycleProgress,
+  localCycleRemaining,
+  localCycles,
+  localPendingQty,
+  localProgress,
+  localRemainingSeconds,
+  localState,
+} from "@/lib/production";
 import {
   GRID_SIZE,
   cellToWorld,
@@ -53,10 +62,40 @@ function makeType(overrides: Partial<ObjectType> & Pick<ObjectType, "id" | "widt
     refund_rate: 0.5,
     xp_reward: 10,
     harvest_xp: 5,
+    max_level: 20,
+    storage_class: null,
+    tier: 0,
     color: "#ffffff",
     block_height: 1,
     sort_order: 0,
     is_active: true,
+    ...overrides,
+  };
+}
+
+/** Test sabiti — görünümün döndürdüğü türev alanlar dahil. */
+function makeObject(overrides: Partial<WorldObject> & Pick<WorldObject, "id" | "type_id">): WorldObject {
+  return {
+    owner_id: "u",
+    local_x: 0,
+    local_y: 0,
+    rotation: 0,
+    state: "idle",
+    state_since: "",
+    state_duration: 0,
+    last_collected_at: null,
+    effective_state: "idle",
+    finishes_at: null,
+    remaining_seconds: 0,
+    level: 1,
+    pending_level: null,
+    effective_level: 1,
+    cycle_seconds: null,
+    cycle_output: null,
+    cycle_input: null,
+    pending_cycles: 0,
+    pending_qty: 0,
+    cycle_remaining_seconds: null,
     ...overrides,
   };
 }
@@ -114,11 +153,7 @@ console.log("\n3) Ayak izi (imlece ortalanmış)");
 
 console.log("\n4) Çarpışma ve doluluk haritası");
 {
-  const field: WorldObject = {
-    id: "a", owner_id: "u", type_id: "quarry",
-    local_x: 5, local_y: 5, rotation: 0, state: "idle", state_since: "",
-    last_collected_at: null, effective_state: "idle", finishes_at: null, remaining_seconds: 0,
-  };
+  const field = makeObject({ id: "a", type_id: "quarry", local_x: 5, local_y: 5 });
   const occupancy = buildOccupancy([field], TYPES);
 
   check("taş ocağı 3x2 = 6 hücre", occupiedCells(field, QUARRY).length === 6);
@@ -180,33 +215,52 @@ console.log("\n7) Süre biçimleme (saniye → hafta)");
   check("uzun biçim", formatDurationLong(3900) === "1 saat 5 dakika", formatDurationLong(3900));
 }
 
-console.log("\n8) Üretim zamanı (istemci sayacı)");
+console.log("\n8) İnşaat sayacı");
 {
   const t0 = 1_000_000;
-  const producing: WorldObject = {
-    id: "p", owner_id: "u", type_id: "wheat_field", local_x: 0, local_y: 0, rotation: 0,
-    state: "producing", state_since: "", last_collected_at: null,
-    effective_state: "producing", finishes_at: null, remaining_seconds: 120,
-  };
+  const building = makeObject({
+    id: "b", type_id: "wheat_field",
+    state: "building", effective_state: "building", state_duration: 120, remaining_seconds: 120,
+  });
 
-  check("hemen sonra 120 sn kaldı", localRemainingSeconds(producing, t0, t0) === 120);
-  check("30 sn sonra 90 kaldı", localRemainingSeconds(producing, t0, t0 + 30_000) === 90);
-  check("süre dolunca 0", localRemainingSeconds(producing, t0, t0 + 200_000) === 0);
-  check("geriye giden saat şişirmiyor", localRemainingSeconds(producing, t0, t0 - 50_000) === 120);
+  check("hemen sonra 120 sn kaldı", localRemainingSeconds(building, t0, t0) === 120);
+  check("30 sn sonra 90 kaldı", localRemainingSeconds(building, t0, t0 + 30_000) === 90);
+  check("süre dolunca 0", localRemainingSeconds(building, t0, t0 + 200_000) === 0);
+  check("geriye giden saat şişirmiyor", localRemainingSeconds(building, t0, t0 - 50_000) === 120);
+  check("dolmadan hâlâ 'building'", localState(building, t0, t0 + 60_000) === "building");
+  check("dolunca yerel olarak 'idle'", localState(building, t0, t0 + 130_000) === "idle");
+  check("sunucu bayat kaldıysa yakalanıyor", isStale(building, t0, t0 + 130_000));
+  check("henüz bitmediyse bayat değil", !isStale(building, t0, t0 + 10_000));
+  check("ilerleme yarıda %50", localProgress(building, 120, t0, t0 + 60_000) === 0.5);
+  check("ilerleme sonda %100", localProgress(building, 120, t0, t0 + 130_000) === 1);
+}
 
-  check("dolmadan hâlâ 'producing'", localState(producing, t0, t0 + 60_000) === "producing");
-  check("dolunca yerel olarak 'ready'", localState(producing, t0, t0 + 130_000) === "ready");
-  check("sunucu bayat kaldıysa yakalanıyor", isStale(producing, t0, t0 + 130_000));
-  check("henüz bitmediyse bayat değil", !isStale(producing, t0, t0 + 10_000));
+console.log("\n9) Sürekli üretim sayacı");
+{
+  const t0 = 1_000_000;
+  // Sunucu: 2 tur birikmiş, mevcut turun bitmesine 30 sn var, tur 120 sn.
+  const farm = makeObject({
+    id: "f", type_id: "wheat_field",
+    cycle_seconds: 120, cycle_output: 10, pending_cycles: 2, pending_qty: 20,
+    cycle_remaining_seconds: 30,
+  });
 
-  check("ilerleme yarıda %50", localProgress(producing, 120, t0, t0 + 60_000) === 0.5);
-  check("ilerleme sonda %100", localProgress(producing, 120, t0, t0 + 130_000) === 1);
+  check("anında sunucunun dediği kadar", localCycles(farm, t0, t0) === 2);
+  check("29 sn sonra hâlâ 2 tur", localCycles(farm, t0, t0 + 29_000) === 2);
+  check("30 sn sonra 3 tur", localCycles(farm, t0, t0 + 30_000) === 3);
+  check("150 sn sonra 4 tur", localCycles(farm, t0, t0 + 150_000) === 4);
+  check("bekleyen miktar turdan türüyor", localPendingQty(farm, t0, t0 + 30_000) === 30);
 
-  const building: WorldObject = { ...producing, state: "building", effective_state: "building", remaining_seconds: 20 };
-  check("inşaat bitince 'idle'", localState(building, t0, t0 + 25_000) === "idle");
+  check("tur sayacı azalıyor", localCycleRemaining(farm, t0, t0 + 10_000) === 20);
+  check("tur dolunca baştan başlıyor", localCycleRemaining(farm, t0, t0 + 30_000) === 120);
+  check("ilerleme oranı 0-1 arasında", localCycleProgress(farm, t0, t0 + 15_000) > 0.8);
 
-  const idle: WorldObject = { ...producing, state: "idle", effective_state: "idle", remaining_seconds: 0 };
-  check("boştaki bina bayat sayılmaz", !isStale(idle, t0, t0 + 999_000));
+  check("yeni tur dolunca tazeleme gerekiyor", isStale(farm, t0, t0 + 31_000));
+  check("tur dolmadan tazeleme gerekmiyor", !isStale(farm, t0, t0 + 5_000));
+
+  const idle = makeObject({ id: "i", type_id: "small_house" });
+  check("üretmeyen bina bayat sayılmaz", !isStale(idle, t0, t0 + 999_000));
+  check("üretmeyen binada tur yok", localCycles(idle, t0, t0 + 999_000) === 0);
 }
 
 console.log(failures === 0 ? "\nTüm kontroller geçti.\n" : `\n${failures} kontrol başarısız.\n`);

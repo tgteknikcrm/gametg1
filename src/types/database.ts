@@ -62,6 +62,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "cities_mayor_fkey"
+            columns: ["mayor_user_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       game_config: {
@@ -113,6 +120,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       items: {
@@ -124,6 +138,7 @@ export type Database = {
           npc_daily_consumption: number
           npc_sell_price: number
           sort_order: number
+          storage_class: string
         }
         Insert: {
           color?: string
@@ -133,6 +148,7 @@ export type Database = {
           npc_daily_consumption?: number
           npc_sell_price?: number
           sort_order?: number
+          storage_class?: string
         }
         Update: {
           color?: string
@@ -142,6 +158,7 @@ export type Database = {
           npc_daily_consumption?: number
           npc_sell_price?: number
           sort_order?: number
+          storage_class?: string
         }
         Relationships: []
       }
@@ -149,6 +166,7 @@ export type Database = {
         Row: {
           amount: number
           created_at: string
+          currency: string
           detail: string | null
           id: number
           reason: Database["public"]["Enums"]["ledger_reason"]
@@ -157,6 +175,7 @@ export type Database = {
         Insert: {
           amount: number
           created_at?: string
+          currency?: string
           detail?: string | null
           id?: never
           reason: Database["public"]["Enums"]["ledger_reason"]
@@ -165,6 +184,7 @@ export type Database = {
         Update: {
           amount?: number
           created_at?: string
+          currency?: string
           detail?: string | null
           id?: never
           reason?: Database["public"]["Enums"]["ledger_reason"]
@@ -177,6 +197,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -245,6 +272,96 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "market_orders_seller_id_fkey"
+            columns: ["seller_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      object_level_costs: {
+        Row: {
+          item_id: string
+          level: number
+          quantity: number
+          type_id: string
+        }
+        Insert: {
+          item_id: string
+          level: number
+          quantity: number
+          type_id: string
+        }
+        Update: {
+          item_id?: string
+          level?: number
+          quantity?: number
+          type_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "object_level_costs_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "object_level_costs_type_id_level_fkey"
+            columns: ["type_id", "level"]
+            isOneToOne: false
+            referencedRelation: "object_levels"
+            referencedColumns: ["type_id", "level"]
+          },
+        ]
+      }
+      object_levels: {
+        Row: {
+          input_qty: number | null
+          level: number
+          output_qty: number | null
+          population_capacity: number
+          produce_seconds: number | null
+          storage_capacity: number
+          type_id: string
+          upgrade_coins: number | null
+          upgrade_seconds: number | null
+          worker_slots: number
+        }
+        Insert: {
+          input_qty?: number | null
+          level: number
+          output_qty?: number | null
+          population_capacity?: number
+          produce_seconds?: number | null
+          storage_capacity?: number
+          type_id: string
+          upgrade_coins?: number | null
+          upgrade_seconds?: number | null
+          worker_slots?: number
+        }
+        Update: {
+          input_qty?: number | null
+          level?: number
+          output_qty?: number | null
+          population_capacity?: number
+          produce_seconds?: number | null
+          storage_capacity?: number
+          type_id?: string
+          upgrade_coins?: number | null
+          upgrade_seconds?: number | null
+          worker_slots?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "object_levels_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "object_types"
+            referencedColumns: ["id"]
+          },
         ]
       }
       object_types: {
@@ -262,6 +379,7 @@ export type Database = {
           is_active: boolean
           level_required: number
           maintenance_per_hour: number
+          max_level: number
           model_key: string
           name: string
           output_item_id: string | null
@@ -270,6 +388,8 @@ export type Database = {
           produce_seconds: number | null
           refund_rate: number
           sort_order: number
+          storage_class: string | null
+          tier: number
           width: number
           worker_slots: number
           xp_reward: number
@@ -288,6 +408,7 @@ export type Database = {
           is_active?: boolean
           level_required?: number
           maintenance_per_hour?: number
+          max_level?: number
           model_key: string
           name: string
           output_item_id?: string | null
@@ -296,6 +417,8 @@ export type Database = {
           produce_seconds?: number | null
           refund_rate?: number
           sort_order?: number
+          storage_class?: string | null
+          tier?: number
           width: number
           worker_slots?: number
           xp_reward?: number
@@ -314,6 +437,7 @@ export type Database = {
           is_active?: boolean
           level_required?: number
           maintenance_per_hour?: number
+          max_level?: number
           model_key?: string
           name?: string
           output_item_id?: string | null
@@ -322,6 +446,8 @@ export type Database = {
           produce_seconds?: number | null
           refund_rate?: number
           sort_order?: number
+          storage_class?: string | null
+          tier?: number
           width?: number
           worker_slots?: number
           xp_reward?: number
@@ -395,6 +521,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "parcels_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
+          },
         ]
       }
       placed_objects: {
@@ -405,12 +538,16 @@ export type Database = {
           footprint_w: number
           id: string
           last_collected_at: string | null
+          level: number
           local_x: number
           local_y: number
           owner_id: string
           parcel_id: string
+          pending_level: number | null
+          produced_since: string | null
           rotation: number
           state: Database["public"]["Enums"]["object_state"]
+          state_duration: number
           state_since: string
           type_id: string
           workers_assigned: number
@@ -422,12 +559,16 @@ export type Database = {
           footprint_w: number
           id?: string
           last_collected_at?: string | null
+          level?: number
           local_x: number
           local_y: number
           owner_id: string
           parcel_id: string
+          pending_level?: number | null
+          produced_since?: string | null
           rotation?: number
           state?: Database["public"]["Enums"]["object_state"]
+          state_duration?: number
           state_since?: string
           type_id: string
           workers_assigned?: number
@@ -439,12 +580,16 @@ export type Database = {
           footprint_w?: number
           id?: string
           last_collected_at?: string | null
+          level?: number
           local_x?: number
           local_y?: number
           owner_id?: string
           parcel_id?: string
+          pending_level?: number | null
+          produced_since?: string | null
           rotation?: number
           state?: Database["public"]["Enums"]["object_state"]
+          state_duration?: number
           state_since?: string
           type_id?: string
           workers_assigned?: number
@@ -456,6 +601,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "placed_objects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "placed_objects_parcel_id_fkey"
@@ -480,6 +632,7 @@ export type Database = {
           created_at: string
           energy: number
           energy_updated_at: string
+          gems: number
           id: string
           level: number
           stat_charisma: number
@@ -495,6 +648,7 @@ export type Database = {
           created_at?: string
           energy?: number
           energy_updated_at?: string
+          gems?: number
           id: string
           level?: number
           stat_charisma?: number
@@ -510,6 +664,7 @@ export type Database = {
           created_at?: string
           energy?: number
           energy_updated_at?: string
+          gems?: number
           id?: string
           level?: number
           stat_charisma?: number
@@ -541,18 +696,38 @@ export type Database = {
         }
         Relationships: []
       }
+      storage_status: {
+        Row: {
+          capacity: number | null
+          storage_class: string | null
+          stored: number | null
+          user_id: string | null
+        }
+        Relationships: []
+      }
       world_objects: {
         Row: {
+          cycle_input: number | null
+          cycle_output: number | null
+          cycle_remaining_seconds: number | null
+          cycle_seconds: number | null
+          effective_level: number | null
           effective_state: Database["public"]["Enums"]["object_state"] | null
           finishes_at: string | null
           id: string | null
           last_collected_at: string | null
+          level: number | null
           local_x: number | null
           local_y: number | null
           owner_id: string | null
+          pending_cycles: number | null
+          pending_level: number | null
+          pending_qty: number | null
+          produced_since: string | null
           remaining_seconds: number | null
           rotation: number | null
           state: Database["public"]["Enums"]["object_state"] | null
+          state_duration: number | null
           state_since: string | null
           type_id: string | null
         }
@@ -563,6 +738,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "placed_objects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "storage_status"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "placed_objects_type_id_fkey"
@@ -605,6 +787,14 @@ export type Database = {
         Args: { p_item_id: string; p_quantity: number }
         Returns: number
       }
+      collect_all: {
+        Args: never
+        Returns: {
+          blocked_full: boolean
+          collected: number
+          items: Json
+        }[]
+      }
       effective_state: {
         Args: {
           p_build_seconds: number
@@ -623,23 +813,6 @@ export type Database = {
         }
         Returns: string
       }
-      harvest_all: {
-        Args: never
-        Returns: {
-          harvested: number
-          items: Json
-          restarted: number
-          xp_gained: number
-        }[]
-      }
-      harvest_object: {
-        Args: { p_object_id: string }
-        Returns: {
-          item_id: string
-          quantity: number
-          xp_gained: number
-        }[]
-      }
       move_object: {
         Args: {
           p_object_id: string
@@ -654,12 +827,16 @@ export type Database = {
           footprint_w: number
           id: string
           last_collected_at: string | null
+          level: number
           local_x: number
           local_y: number
           owner_id: string
           parcel_id: string
+          pending_level: number | null
+          produced_since: string | null
           rotation: number
           state: Database["public"]["Enums"]["object_state"]
+          state_duration: number
           state_since: string
           type_id: string
           workers_assigned: number
@@ -670,6 +847,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      object_stats: {
+        Args: { p_level: number; p_type_id: string }
+        Returns: {
+          input_qty: number
+          output_qty: number
+          population_capacity: number
+          produce_seconds: number
+          storage_capacity: number
+          worker_slots: number
+        }[]
       }
       place_object: {
         Args: {
@@ -685,12 +873,16 @@ export type Database = {
           footprint_w: number
           id: string
           last_collected_at: string | null
+          level: number
           local_x: number
           local_y: number
           owner_id: string
           parcel_id: string
+          pending_level: number | null
+          produced_since: string | null
           rotation: number
           state: Database["public"]["Enums"]["object_state"]
+          state_duration: number
           state_since: string
           type_id: string
           workers_assigned: number
@@ -716,11 +908,20 @@ export type Database = {
         Args: { p_height: number; p_rotation: number; p_width: number }
         Returns: Record<string, unknown>
       }
+      rush_object: { Args: { p_object_id: string }; Returns: number }
       sell_item: {
         Args: { p_item_id: string; p_quantity: number }
         Returns: number
       }
-      start_production: {
+      storage_capacity: {
+        Args: { p_class: string; p_user: string }
+        Returns: number
+      }
+      stored_amount: {
+        Args: { p_class: string; p_user: string }
+        Returns: number
+      }
+      upgrade_object: {
         Args: { p_object_id: string }
         Returns: {
           created_at: string
@@ -729,12 +930,16 @@ export type Database = {
           footprint_w: number
           id: string
           last_collected_at: string | null
+          level: number
           local_x: number
           local_y: number
           owner_id: string
           parcel_id: string
+          pending_level: number | null
+          produced_since: string | null
           rotation: number
           state: Database["public"]["Enums"]["object_state"]
+          state_duration: number
           state_since: string
           type_id: string
           workers_assigned: number
@@ -757,6 +962,9 @@ export type Database = {
         | "wages"
         | "tax"
         | "land"
+        | "upgrade"
+        | "rush"
+        | "starting_grant"
       object_category: "production" | "housing" | "civic" | "decor"
       object_state:
         | "building"
@@ -900,6 +1108,9 @@ export const Constants = {
         "wages",
         "tax",
         "land",
+        "upgrade",
+        "rush",
+        "starting_grant",
       ],
       object_category: ["production", "housing", "civic", "decor"],
       object_state: ["building", "idle", "producing", "ready", "needs_workers"],

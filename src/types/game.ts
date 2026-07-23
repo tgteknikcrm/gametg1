@@ -21,6 +21,12 @@ export type ObjectState = Database["public"]["Enums"]["object_state"];
 
 export type InventoryRow = Tables["inventory"]["Row"];
 export type LedgerRow = Tables["ledger"]["Row"];
+export type ObjectLevel = Tables["object_levels"]["Row"];
+export type ObjectLevelCost = Tables["object_level_costs"]["Row"];
+export type StorageStatus = Database["public"]["Views"]["storage_status"]["Row"];
+
+/** Depo sınıfı: tahıl zinciri ve diğer mallar ayrı ambarlarda tutulur. */
+export type StorageClass = "grain" | "goods";
 
 /**
  * Sahnede çizilen nesne — `world_objects` görünümünden gelir.
@@ -39,10 +45,21 @@ export type WorldObject = Pick<
   | "rotation"
   | "state"
   | "state_since"
+  | "state_duration"
   | "last_collected_at"
   | "effective_state"
   | "finishes_at"
   | "remaining_seconds"
+  // --- Faz 2.5: seviye ve sürekli üretim
+  | "level"
+  | "pending_level"
+  | "effective_level"
+  | "cycle_seconds"
+  | "cycle_output"
+  | "cycle_input"
+  | "pending_cycles"
+  | "pending_qty"
+  | "cycle_remaining_seconds"
 > & {
   id: string;
   type_id: string;

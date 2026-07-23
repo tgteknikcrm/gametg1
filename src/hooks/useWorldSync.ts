@@ -8,8 +8,10 @@ import {
   fetchCatalog,
   fetchInventory,
   fetchItems,
+  fetchLevels,
   fetchParcel,
   fetchProfile,
+  fetchStorage,
   fetchWorld,
   queryKeys,
 } from "@/lib/queries";
@@ -45,6 +47,19 @@ export function useWorldSync(userId: string | null) {
     queryKey: queryKeys.items,
     queryFn: fetchItems,
     staleTime: CATALOG_STALE_MS,
+    enabled,
+  });
+
+  const levels = useQuery({
+    queryKey: queryKeys.levels,
+    queryFn: fetchLevels,
+    staleTime: CATALOG_STALE_MS,
+    enabled,
+  });
+
+  const storage = useQuery({
+    queryKey: queryKeys.storage(userId),
+    queryFn: fetchStorage,
     enabled,
   });
 
@@ -92,6 +107,14 @@ export function useWorldSync(userId: string | null) {
   }, [inventory.data]);
 
   useEffect(() => {
+    if (levels.data) useWorldStore.getState().setLevels(levels.data);
+  }, [levels.data]);
+
+  useEffect(() => {
+    if (storage.data) useWorldStore.getState().setStorage(storage.data);
+  }, [storage.data]);
+
+  useEffect(() => {
     useWorldStore.getState().setProfile(profile.data ?? null);
   }, [profile.data]);
 
@@ -109,7 +132,16 @@ export function useWorldSync(userId: string | null) {
 
   return {
     isLoading: catalog.isLoading || world.isLoading || profile.isLoading || parcel.isLoading,
-    error: catalog.error ?? parcel.error ?? profile.error ?? world.error ?? items.error ?? null,
-    isReady: Boolean(catalog.data && world.data && profile.data && parcel.data && items.data),
+    error:
+      catalog.error ??
+      parcel.error ??
+      profile.error ??
+      world.error ??
+      items.error ??
+      levels.error ??
+      null,
+    isReady: Boolean(
+      catalog.data && world.data && profile.data && parcel.data && items.data && levels.data,
+    ),
   };
 }

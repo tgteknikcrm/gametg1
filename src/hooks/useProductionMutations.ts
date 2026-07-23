@@ -8,9 +8,8 @@ import { queryKeys } from "@/lib/queries";
 import { getSupabase } from "@/lib/supabase/client";
 import { useGameStore } from "@/store/useGameStore";
 import { useWorldStore } from "@/store/useWorldStore";
-import type { WorldObject } from "@/types/game";
 
-/** Sunucudan dönen mal adını okunur yaz: "10 Buğday". */
+/** Sunucudan dönen mal adlarını okunur yaz: "10 Buğday, 5 Un". */
 function describeItems(items: Record<string, number>): string {
   const byId = useWorldStore.getState().itemsById;
   return Object.entries(items)
@@ -19,14 +18,11 @@ function describeItems(items: Record<string, number>): string {
 }
 
 /**
- * Üretim ve pazar mutasyonları.
+ * Üretim, yükseltme, pazar ve elmas mutasyonları.
  *
- * Hepsi `supabase.rpc()`. Süre kontrolü sunucuda: istemcinin geri sayımı
- * bitmiş görünse bile `effective_state` kabul etmezse işlem reddedilir.
- *
- * Bu işlemler tıklamayla tetiklenen bilinçli eylemler olduğu için iyimser
- * güncelleme yalnızca durum rozetine uygulanır; miktar ve altın sunucudan
- * doğrulanmış hâliyle gelir.
+ * Üretim artık tıklamayla başlatılmıyor: binalar inşaat biter bitmez kesintisiz
+ * üretir, biriken mal `collect_all` ile envantere geçer. `useProductionClock`
+ * bunu bir tur dolduğunda kendiliğinden çağırır.
  */
 export function useProductionMutations() {
   const client = useQueryClient();
@@ -37,75 +33,52 @@ export function useProductionMutations() {
     void client.invalidateQueries({ queryKey: queryKeys.world });
     void client.invalidateQueries({ queryKey: queryKeys.profile(userId) });
     void client.invalidateQueries({ queryKey: queryKeys.inventory(userId) });
+    void client.invalidateQueries({ queryKey: queryKeys.storage(userId) });
   };
 
-  /** Rozet anında değişsin diye yalnızca durumu iyimser günceller. */
-  const patchState = (objectId: string, state: WorldObject["state"]) => {
-    const previous = client.getQueryData<WorldObject[]>(queryKeys.world);
-    if (!previous) return previous;
-    client.setQueryData<WorldObject[]>(
-      queryKeys.world,
-      previous.map((object) =>
-        object.id === objectId
-          ? { ...object, state, effective_state: state, remaining_seconds: null }
-          : object,
-      ),
-    );
-    return previous;
-  };
-
-  const rollback = (previous: WorldObject[] | undefined) => {
-    if (previous) client.setQueryData(queryKeys.world, previous);
-  };
-
-  const start = useMutation({
-    mutationFn: async (objectId: string) => {
-      const { error } = await getSupabase().rpc("start_production", { p_object_id: objectId });
-      if (error) throw error;
-    },
-    onMutate: (objectId) => patchState(objectId, "producing"),
-    onError: (error, _id, previous) => {
-      rollback(previous);
-      notify(toGameErrorMessage(error), "error");
-    },
-    onSuccess: () => notify("Üretim başladı", "success"),
-    onSettled: invalidateAll,
-  });
-
-  const harvest = useMutation({
-    mutationFn: async (objectId: string) => {
-      const { data, error } = await getSupabase().rpc("harvest_object", { p_object_id: objectId });
-      if (error) throw error;
-      return data?.[0];
-    },
-    onMutate: (objectId) => patchState(objectId, "idle"),
-    onError: (error, _id, previous) => {
-      rollback(previous);
-      notify(toGameErrorMessage(error), "error");
-    },
-    onSuccess: (result) => {
-      if (!result) return;
-      const name = useWorldStore.getState().itemsById.get(result.item_id)?.name ?? result.item_id;
-      notify(`+${result.quantity} ${name}`, "success");
-    },
-    onSettled: invalidateAll,
-  });
-
-  const harvestAll = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await getSupabase().rpc("harvest_all");
+  const collect = useMutation({
+    // Değişken `silent` bayrağı taşır (otomatik toplamada sessiz kal);
+    // RPC'nin kendisi parametre almıyor, bayrak yalnızca onSuccess'te okunuyor.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    mutationFn: async (silent: boolean) => {
+      const { data, error } = await getSupabase().rpc("collect_all");
       if (error) throw error;
       return data?.[0];
     },
     onError: (error) => notify(toGameErrorMessage(error), "error"),
-    onSuccess: (result) => {
-      if (!result || result.harvested === 0) {
-        notify("Hasada hazır bina yok", "error");
+    onSuccess: (result, silent) => {
+      if (!result) return;
+      if (result.collected === 0) {
+        if (!silent) notify("Toplanacak ürün yok", "error");
         return;
       }
       const items = describeItems((result.items ?? {}) as Record<string, number>);
-      notify(`${result.harvested} bina toplandı · ${items}`, "success");
+      notify(
+        result.blocked_full ? `${items} · depo doldu!` : `+${items}`,
+        result.blocked_full ? "error" : "success",
+      );
     },
+    onSettled: invalidateAll,
+  });
+
+  const upgrade = useMutation({
+    mutationFn: async (objectId: string) => {
+      const { error } = await getSupabase().rpc("upgrade_object", { p_object_id: objectId });
+      if (error) throw error;
+    },
+    onError: (error) => notify(toGameErrorMessage(error), "error"),
+    onSuccess: () => notify("Yükseltme başladı", "success"),
+    onSettled: invalidateAll,
+  });
+
+  const rush = useMutation({
+    mutationFn: async (objectId: string) => {
+      const { data, error } = await getSupabase().rpc("rush_object", { p_object_id: objectId });
+      if (error) throw error;
+      return data as number;
+    },
+    onError: (error) => notify(toGameErrorMessage(error), "error"),
+    onSuccess: (gems) => notify(`Anında bitti · −${gems} elmas`, "success"),
     onSettled: invalidateAll,
   });
 
@@ -139,14 +112,15 @@ export function useProductionMutations() {
 
   return useMemo(
     () => ({
-      startProduction: (objectId: string) => start.mutate(objectId),
-      harvest: (objectId: string) => harvest.mutate(objectId),
-      harvestAll: () => harvestAll.mutate(),
+      /** `silent` = otomatik toplama; sonuç yoksa kullanıcıyı rahatsız etme. */
+      collectAll: (silent = false) => collect.mutate(silent),
+      upgrade: (objectId: string) => upgrade.mutate(objectId),
+      rush: (objectId: string) => rush.mutate(objectId),
       sell: (itemId: string, quantity: number) => sell.mutate({ itemId, quantity }),
       buy: (itemId: string, quantity: number) => buy.mutate({ itemId, quantity }),
-      isBusy: start.isPending || harvest.isPending || harvestAll.isPending,
+      isBusy: collect.isPending || upgrade.isPending || rush.isPending,
     }),
-    [start, harvest, harvestAll, sell, buy],
+    [collect, upgrade, rush, sell, buy],
   );
 }
 

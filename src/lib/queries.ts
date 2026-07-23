@@ -3,9 +3,12 @@ import { getSupabase } from "@/lib/supabase/client";
 import type {
   InventoryRow,
   Item,
+  ObjectLevel,
+  ObjectLevelCost,
   ObjectType,
   Parcel,
   Profile,
+  StorageStatus,
   WorldObject,
 } from "@/types/game";
 
@@ -13,9 +16,11 @@ import type {
 export const queryKeys = {
   catalog: ["catalog"] as const,
   items: ["items"] as const,
+  levels: ["levels"] as const,
   parcel: ["parcel"] as const,
   profile: (userId: string | null) => ["profile", userId] as const,
   inventory: (userId: string | null) => ["inventory", userId] as const,
+  storage: (userId: string | null) => ["storage", userId] as const,
   world: ["world"] as const,
 };
 
@@ -24,7 +29,10 @@ export const queryKeys = {
  * `effective_state`, `finishes_at`, `remaining_seconds`.
  */
 const WORLD_COLUMNS =
-  "id, owner_id, type_id, local_x, local_y, rotation, state, state_since, last_collected_at, effective_state, finishes_at, remaining_seconds";
+  "id, owner_id, type_id, local_x, local_y, rotation, state, state_since, state_duration, " +
+  "last_collected_at, effective_state, finishes_at, remaining_seconds, " +
+  "level, pending_level, effective_level, cycle_seconds, cycle_output, cycle_input, " +
+  "pending_cycles, pending_qty, cycle_remaining_seconds";
 
 export async function fetchCatalog(): Promise<ObjectType[]> {
   const { data, error } = await getSupabase()
@@ -39,6 +47,31 @@ export async function fetchCatalog(): Promise<ObjectType[]> {
 
 export async function fetchItems(): Promise<Item[]> {
   const { data, error } = await getSupabase().from("items").select("*").order("sort_order");
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * Seviye tabloları. Birkaç yüz satır, nadiren değişir — bir kez çekip
+ * önbellekte tutuluyor. Yükseltme paneli buradan besleniyor.
+ */
+export async function fetchLevels(): Promise<{
+  levels: ObjectLevel[];
+  costs: ObjectLevelCost[];
+}> {
+  const supabase = getSupabase();
+  const [levels, costs] = await Promise.all([
+    supabase.from("object_levels").select("*").order("type_id").order("level"),
+    supabase.from("object_level_costs").select("*"),
+  ]);
+  if (levels.error) throw levels.error;
+  if (costs.error) throw costs.error;
+  return { levels: levels.data, costs: costs.data };
+}
+
+/** Tahıl ve mal ambarlarının doluluk/kapasite durumu. */
+export async function fetchStorage(): Promise<StorageStatus[]> {
+  const { data, error } = await getSupabase().from("storage_status").select("*");
   if (error) throw error;
   return data;
 }
@@ -88,5 +121,8 @@ export async function fetchWorld(): Promise<WorldObject[]> {
     .select(WORLD_COLUMNS)
     .order("state_since");
   if (error) throw error;
-  return data as WorldObject[];
+  // supabase-js'in derleme zamanı select ayrıştırıcısı bu kadar uzun kolon
+  // listesini çözemiyor; dönüş tipini imzada zaten daraltıyoruz. Kolon adı
+  // yanlışsa PostgREST çalışma zamanında hata verir.
+  return data as unknown as WorldObject[];
 }

@@ -1,12 +1,12 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useRef } from "react";
 import * as THREE from "three";
 
 import { CELL_SIZE, footprintCenterWorld, rotatedFootprint } from "@/lib/grid";
 import { localState } from "@/lib/production";
 import { markerGeometry, markerMaterial } from "@/lib/three-assets";
-import { useClockStore } from "@/store/useClockStore";
 import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 import type { ObjectState } from "@/types/game";
 
@@ -24,20 +24,35 @@ const scratchObject = new THREE.Object3D();
 const scratchColor = new THREE.Color();
 
 /**
- * Binaların üstünde yüzen durum göstergeleri.
+ * Binaların üstünde yüzen durum göstergeleri — tek InstancedMesh, 1 draw call.
  *
- * Hepsi tek InstancedMesh: nesne sayısı ne olursa olsun 1 draw call. Saat
- * saniyede bir ilerlediği için "hazır" rozeti sunucuyu beklemeden belirir.
+ * Güncelleme `useFrame` içinde ve store'dan İMPERATİF okumayla yapılıyor:
+ * saatin saniyede bir tikleyen React durumuna abone olsaydık, hiçbir şey
+ * değişmese bile saniyede bir tüm sahne yeniden render olurdu.
+ *
+ * Yalnızca bir örneğin durumu değiştiğinde matris yazıyoruz; sabit sahnede
+ * her karedeki iş bir karşılaştırma döngüsünden ibaret.
  */
 export function StateMarkers() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const objects = useWorldStore((state) => state.objects);
-  const syncedAt = useWorldStore((state) => state.syncedAt);
-  const now = useClockStore((state) => state.now);
+  const signature = useRef("");
 
-  useLayoutEffect(() => {
+  useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
+
+    const { objects, syncedAt, typesById } = useWorldStore.getState();
+    if (syncedAt === 0) return;
+    const now = Date.now();
+
+    // Durum kümesi değişmediyse hiçbir şey yazma.
+    let stamp = "";
+    for (const object of objects) {
+      if (!typesById.has(object.type_id)) continue;
+      stamp += localState(object, syncedAt, now)[0];
+    }
+    if (stamp === signature.current) return;
+    signature.current = stamp;
 
     let index = 0;
     for (const object of objects) {
@@ -63,7 +78,7 @@ export function StateMarkers() {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [objects, syncedAt, now]);
+  });
 
   return (
     <instancedMesh
