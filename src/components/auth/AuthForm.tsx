@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { Hammer, Loader2, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
 import { getSupabase } from "@/lib/supabase/client";
@@ -15,6 +15,9 @@ function authErrorMessage(message: string): string {
   if (/fetch|network/i.test(message)) return "Sunucuya ulaşılamadı";
   return "Giriş yapılamadı, tekrar dene";
 }
+
+const FIELD =
+  "mt-1.5 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2.5 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-emerald-400/50 focus:bg-white/[0.07]";
 
 export function AuthForm() {
   const [isSignUp, setIsSignUp] = useState(false);
@@ -45,17 +48,23 @@ export function AuthForm() {
   };
 
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 p-6">
-      <form
-        onSubmit={submit}
-        className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900 p-6 shadow-2xl"
-      >
-        <h1 className="text-lg font-semibold text-slate-100">Şehir Simülatörü</h1>
-        <p className="mt-1 mb-6 text-sm text-slate-400">
-          {isSignUp ? "Yeni hesap oluştur ve şehre katıl." : "Şehre dönmek için giriş yap."}
+    <div
+      className="grid min-h-screen place-items-center p-6"
+      style={{ background: "linear-gradient(180deg, #0e1526, #0a1020 60%, #0d1a2a)" }}
+    >
+      <form onSubmit={submit} className="hud-card w-full max-w-[380px] p-7">
+        <span className="mb-5 grid size-11 place-items-center rounded-xl bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25">
+          <Hammer className="size-5" />
+        </span>
+
+        <h1 className="text-xl leading-tight font-semibold text-slate-50">Şehir Simülatörü</h1>
+        <p className="mt-1.5 mb-6 text-[13px] text-slate-400">
+          {isSignUp
+            ? "Hesabını oluştur ve paylaşılan şehre katıl."
+            : "Şehre dönmek için giriş yap."}
         </p>
 
-        <label className="block text-xs font-medium text-slate-300" htmlFor="email">
+        <label className="block text-[11px] font-medium tracking-wide text-slate-400 uppercase" htmlFor="email">
           E-posta
         </label>
         <input
@@ -63,12 +72,16 @@ export function AuthForm() {
           type="email"
           required
           autoComplete="email"
+          placeholder="ornek@eposta.com"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="mt-1 mb-4 w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400/60"
+          className={FIELD}
         />
 
-        <label className="block text-xs font-medium text-slate-300" htmlFor="password">
+        <label
+          className="mt-4 block text-[11px] font-medium tracking-wide text-slate-400 uppercase"
+          htmlFor="password"
+        >
           Şifre
         </label>
         <input
@@ -77,19 +90,23 @@ export function AuthForm() {
           required
           minLength={6}
           autoComplete={isSignUp ? "new-password" : "current-password"}
+          placeholder="en az 6 karakter"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none focus:border-emerald-400/60"
+          className={FIELD}
         />
 
         {error && (
-          <p className="mt-4 rounded-lg bg-rose-500/15 px-3 py-2 text-xs text-rose-200">{error}</p>
+          <p className="mt-4 flex items-center gap-2 rounded-xl bg-rose-500/12 px-3 py-2.5 text-xs text-rose-200 ring-1 ring-rose-400/25">
+            <TriangleAlert className="size-3.5 shrink-0" />
+            {error}
+          </p>
         )}
 
         <button
           type="submit"
           disabled={busy}
-          className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400 disabled:opacity-60"
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-300 disabled:opacity-60"
         >
           {busy && <Loader2 className="size-4 animate-spin" />}
           {isSignUp ? "Hesap oluştur" : "Giriş yap"}
@@ -101,7 +118,7 @@ export function AuthForm() {
             setIsSignUp((value) => !value);
             setError(null);
           }}
-          className="mt-4 w-full text-center text-xs text-slate-400 transition-colors hover:text-slate-200"
+          className="mt-4 w-full text-center text-xs text-slate-500 transition-colors hover:text-slate-300"
         >
           {isSignUp ? "Zaten hesabım var — giriş yap" : "Hesabım yok — kayıt ol"}
         </button>

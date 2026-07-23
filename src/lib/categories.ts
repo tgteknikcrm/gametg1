@@ -1,10 +1,12 @@
+import { Factory, Home, Landmark, TreePine, type LucideIcon } from "lucide-react";
+
 import type { ObjectCategory } from "@/types/game";
 
 /**
- * Kategori etiketleri ve sırası — saf arayüz verisi.
+ * Kategori etiketleri, ikonları ve sırası — saf arayüz verisi.
  *
  * Denge verisi DEĞİL: fiyat, ölçü, seviye kapısı gibi her şey `object_types`
- * tablosunda. Burada yalnızca sekmelerin Türkçe adı ve sırası var.
+ * tablosunda. Burada yalnızca sekmelerin görünümü var.
  */
 export const CATEGORY_ORDER: readonly ObjectCategory[] = [
   "production",
@@ -18,4 +20,11 @@ export const CATEGORY_LABELS: Record<ObjectCategory, string> = {
   housing: "Konut",
   civic: "Kamu",
   decor: "Süsleme",
+};
+
+export const CATEGORY_ICONS: Record<ObjectCategory, LucideIcon> = {
+  production: Factory,
+  housing: Home,
+  civic: Landmark,
+  decor: TreePine,
 };

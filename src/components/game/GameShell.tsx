@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { Loader2 } from "lucide-react";
 
 import { BuildSidebar } from "@/components/ui-game/BuildSidebar";
 import { ModeHint } from "@/components/ui-game/ModeHint";
@@ -18,10 +19,7 @@ import { useWorldStore } from "@/store/useWorldStore";
  * WebGL bağlamı sunucuda oluşturulamaz; Canvas'ı yalnızca istemcide yüklüyoruz.
  * HUD katmanları normal DOM olduğu için SSR'da render edilir.
  */
-const GameCanvas = dynamic(() => import("@/components/game/GameCanvas"), {
-  ssr: false,
-  loading: () => <Overlay text="Sahne yükleniyor…" />,
-});
+const GameCanvas = dynamic(() => import("@/components/game/GameCanvas"), { ssr: false });
 
 export function GameShell() {
   const userId = useWorldStore((state) => state.userId);
@@ -32,10 +30,21 @@ export function GameShell() {
   useDevBridge(mutations);
 
   return (
-    <main className="relative h-screen w-screen touch-none overflow-hidden bg-slate-900 select-none">
+    <main
+      className="relative h-screen w-screen touch-none overflow-hidden select-none"
+      // Gökyüzü CSS degradesi: tuval şeffaf, GPU'ya hiçbir maliyeti yok.
+      style={{ background: "linear-gradient(180deg, var(--sky-top), var(--sky-bottom))" }}
+    >
       <div className="absolute inset-0">
         <GameCanvas executor={mutations} />
       </div>
+
+      {/* Kenarlarda hafif koyulaşma — panelleri sahneden ayırır. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 z-10"
+        style={{ background: "radial-gradient(ellipse at 50% 45%, transparent 45%, rgba(15,26,46,0.28) 100%)" }}
+      />
 
       <TopBar />
       <BuildSidebar />
@@ -43,16 +52,19 @@ export function GameShell() {
       <ModeHint />
       <NoticeToast />
 
-      {error && <Overlay text={`Şehir yüklenemedi: ${toGameErrorMessage(error)}`} />}
-      {!error && !isReady && <Overlay text="Şehir yükleniyor…" />}
+      {error && <Overlay text={`Şehir yüklenemedi: ${toGameErrorMessage(error)}`} spinning={false} />}
+      {!error && !isReady && <Overlay text="Şehir yükleniyor…" spinning />}
     </main>
   );
 }
 
-function Overlay({ text }: { text: string }) {
+function Overlay({ text, spinning }: { text: string; spinning: boolean }) {
   return (
-    <div className="absolute inset-0 z-30 grid place-items-center bg-slate-950/80 text-sm text-slate-300 backdrop-blur-sm">
-      {text}
+    <div className="absolute inset-0 z-40 grid place-items-center bg-slate-950/70 backdrop-blur-sm">
+      <div className="hud-card flex items-center gap-2.5 px-4 py-3 text-[13px] text-slate-200">
+        {spinning && <Loader2 className="size-4 animate-spin text-emerald-300" />}
+        {text}
+      </div>
     </div>
   );
 }

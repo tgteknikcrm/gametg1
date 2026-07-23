@@ -16,7 +16,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
 function Splash({ text }: { text: string }) {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 text-sm text-slate-400">
+    <div
+      className="grid min-h-screen place-items-center text-sm text-slate-400"
+      style={{ background: "linear-gradient(180deg, #0e1526, #0a1020)" }}
+    >
       {text}
     </div>
   );
@@ -24,8 +27,11 @@ function Splash({ text }: { text: string }) {
 
 function MissingConfig() {
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-950 p-6">
-      <div className="max-w-md rounded-2xl border border-amber-400/30 bg-slate-900 p-6 text-sm text-slate-300">
+    <div
+      className="grid min-h-screen place-items-center p-6"
+      style={{ background: "linear-gradient(180deg, #0e1526, #0a1020)" }}
+    >
+      <div className="hud-card max-w-md p-6 text-sm text-slate-300">
         <h1 className="mb-3 text-base font-semibold text-amber-300">Supabase yapılandırılmamış</h1>
         <p className="mb-4">
           Proje kökünde <code className="text-slate-100">.env.local</code> dosyası oluştur ve şu iki

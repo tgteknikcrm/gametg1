@@ -6,7 +6,12 @@ import * as THREE from "three";
 
 import { useDragAwareClick } from "@/hooks/useDragAwareClick";
 import { CELL_SIZE, footprintCenterWorld, rotatedFootprint } from "@/lib/grid";
-import { buildingMaterial, unitBoxGeometry } from "@/lib/three-assets";
+import {
+  buildingMaterial,
+  foundationMaterial,
+  unitBoxGeometry,
+  unitTileGeometry,
+} from "@/lib/three-assets";
 import { useGameStore } from "@/store/useGameStore";
 import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 
@@ -14,7 +19,7 @@ import { getObjectType, useWorldStore } from "@/store/useWorldStore";
 const MAX_INSTANCES = 800;
 
 /** Bina gövdesi hücreyi tam doldurmaz — komşularla arasında ince boşluk kalsın. */
-const BODY_INSET = 0.92;
+const BODY_INSET = 0.9;
 
 const scratchObject = new THREE.Object3D();
 const scratchColor = new THREE.Color();
@@ -23,11 +28,15 @@ const scratchColor = new THREE.Color();
  * Tüm binalar TEK InstancedMesh içinde çizilir: 500 nesne = 1 draw call.
  * Renk `instanceColor` ile örnek başına verilir, böylece tip başına ayrı materyal gerekmez.
  *
- * Faz 1'de kutu geometrisinin yerini GLB alacak; o zaman model başına bir InstancedMesh'e
- * bölünecek — bu bileşenin dışındaki hiçbir şey değişmeyecek.
+ * İkinci bir InstancedMesh, her binanın altına koyu bir taban serer. Gerçek gölge
+ * yerine geçen bu numara toplam maliyeti 1 draw call artırır ve gövdeleri zemine oturtur.
+ *
+ * Faz 2+'da kutu geometrisinin yerini GLB alacak; o zaman model başına bir
+ * InstancedMesh'e bölünecek — bu bileşenin dışındaki hiçbir şey değişmeyecek.
  */
 export function PlacedObjects() {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const bodyRef = useRef<THREE.InstancedMesh>(null);
+  const baseRef = useRef<THREE.InstancedMesh>(null);
   const instanceIds = useRef<string[]>([]);
 
   const objects = useWorldStore((state) => state.objects);
@@ -38,8 +47,9 @@ export function PlacedObjects() {
   const hiddenId = mode === "move" ? selectedObjectId : null;
 
   useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+    const body = bodyRef.current;
+    const base = baseRef.current;
+    if (!body || !base) return;
 
     const ids: string[] = [];
     let index = 0;
@@ -53,23 +63,26 @@ export function PlacedObjects() {
       const [cx, cz] = footprintCenterWorld({ x: object.local_x, y: object.local_y }, w, h);
 
       scratchObject.position.set(cx, 0, cz);
-      scratchObject.scale.set(
-        w * CELL_SIZE * BODY_INSET,
-        type.block_height,
-        h * CELL_SIZE * BODY_INSET,
-      );
+      scratchObject.scale.set(w * CELL_SIZE * BODY_INSET, type.block_height, h * CELL_SIZE * BODY_INSET);
       scratchObject.updateMatrix();
+      body.setMatrixAt(index, scratchObject.matrix);
+      body.setColorAt(index, scratchColor.set(type.color));
 
-      mesh.setMatrixAt(index, scratchObject.matrix);
-      mesh.setColorAt(index, scratchColor.set(type.color));
+      scratchObject.position.set(cx, 0.018, cz);
+      scratchObject.scale.set(w * CELL_SIZE, 1, h * CELL_SIZE);
+      scratchObject.updateMatrix();
+      base.setMatrixAt(index, scratchObject.matrix);
+
       ids.push(object.id);
       index++;
     }
 
-    mesh.count = index;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.computeBoundingSphere();
+    for (const mesh of [body, base]) {
+      mesh.count = index;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+    if (body.instanceColor) body.instanceColor.needsUpdate = true;
     instanceIds.current = ids;
   }, [objects, hiddenId]);
 
@@ -87,11 +100,19 @@ export function PlacedObjects() {
   const clickHandlers = useDragAwareClick(handleClick);
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[unitBoxGeometry, buildingMaterial, MAX_INSTANCES]}
-      frustumCulled
-      {...clickHandlers}
-    />
+    <>
+      <instancedMesh
+        ref={baseRef}
+        args={[unitTileGeometry, foundationMaterial, MAX_INSTANCES]}
+        raycast={() => null}
+        frustumCulled
+      />
+      <instancedMesh
+        ref={bodyRef}
+        args={[unitBoxGeometry, buildingMaterial, MAX_INSTANCES]}
+        frustumCulled
+        {...clickHandlers}
+      />
+    </>
   );
 }

@@ -1,12 +1,6 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
 
 import "./globals.css";
-
-const inter = Inter({
-  variable: "--font-sans",
-  subsets: ["latin", "latin-ext"], // latin-ext: Türkçe ı, ğ, ş, ç karakterleri
-});
 
 export const metadata: Metadata = {
   title: "Şehir Simülatörü",
@@ -14,13 +8,23 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f172a",
+  themeColor: "#0d1220",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="tr" className="dark">
-      <body className={`${inter.variable} overflow-hidden antialiased`}>{children}</body>
+      <head>
+        {/* Latin alt kümesi ilk boyamada gerekli; genişletilmiş küme bekleyebilir. */}
+        <link
+          rel="preload"
+          href="/fonts/google-sans-flex-latin.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
+      <body className="overflow-hidden antialiased">{children}</body>
     </html>
   );
 }

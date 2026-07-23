@@ -29,12 +29,20 @@ export const groundGeometry = new THREE.PlaneGeometry(GROUND_EXTENT, GROUND_EXTE
 /** Grid çizgileri: 2 × (GRID_SIZE + 1) segment, tek draw call. */
 export const gridGeometry = createGridGeometry();
 
-export const groundMaterial = new THREE.MeshLambertMaterial({ color: "#86ab5b" });
+export const groundMaterial = new THREE.MeshLambertMaterial({ color: "#8ab463" });
 
 export const gridMaterial = new THREE.LineBasicMaterial({
   color: "#ffffff",
   transparent: true,
-  opacity: 0.32,
+  opacity: 0.26,
+});
+
+/** Binaların altındaki koyu taban — gövdeyi zemine oturtur, ucuz bir gölge yerine geçer. */
+export const foundationMaterial = new THREE.MeshBasicMaterial({
+  color: "#2f3d24",
+  transparent: true,
+  opacity: 0.3,
+  depthWrite: false,
 });
 
 /** Binalar tek InstancedMesh'te toplanır; renk `instanceColor` ile örnek başına verilir. */
