@@ -43,6 +43,12 @@ interface GameUiState {
 
   notice: Notice | null;
 
+  /** Yıkım onayı bekleyen nesne. Silme asla tek tıkla olmaz. */
+  pendingRemovalId: string | null;
+
+  requestRemoval: (objectId: string) => void;
+  cancelRemoval: () => void;
+
   startPlacing: (typeId: string) => void;
   startMoving: (objectId: string) => void;
   setGhostPosition: (cell: GridCell | null) => void;
@@ -105,6 +111,10 @@ export const useGameStore = create<GameUiState>((set, get) => ({
   ghostReason: null,
   ghostPlan: null,
   notice: null,
+  pendingRemovalId: null,
+
+  requestRemoval: (objectId) => set({ pendingRemovalId: objectId }),
+  cancelRemoval: () => set({ pendingRemovalId: null }),
 
   startPlacing: (typeId) => {
     const base: GhostInputs = {
@@ -181,6 +191,7 @@ export const useGameStore = create<GameUiState>((set, get) => ({
       mode: "navigate",
       placingTypeId: null,
       selectedObjectId: null,
+      pendingRemovalId: null,
       ...clearedPlan(state.ghostPosition),
     })),
 

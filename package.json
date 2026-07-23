@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "npx --yes tsx scripts/verify-grid.ts",
     "gen:types": "node scripts/gen-types.mjs",
-    "test:db": "node scripts/db-contract-test.mjs"
+    "test:db": "node scripts/db-contract-test.mjs",
+    "test:production": "node scripts/production-test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

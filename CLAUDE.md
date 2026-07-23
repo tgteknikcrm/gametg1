@@ -64,8 +64,8 @@ Sırayla ilerle, her fazın sonunda kullanıcının onayını bekle.
 |-----|--------|-------|
 | 0 | İstemci iskeleti, veritabanı yok | ✅ tamamlandı |
 | 1 | Kalıcılık: Auth, şema, `place_object`/`move_object`/`remove_object` | ✅ tamamlandı |
-| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı, XP | sırada |
-| 3 | Arsa ve şehir: halka parselleri, mesafe fiyatlaması, satın alma | beklemede |
+| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı, XP | ✅ tamamlandı |
+| 3 | Arsa ve şehir: halka parselleri, mesafe fiyatlaması, satın alma | sırada |
 | 4 | İşgücü: nüfus havuzu, işçi ataması, ücretler | beklemede |
 | 5 | Avatar gelişimi: enerji, eğitim/kültür/spor, istatistik bonusları | beklemede |
 | 6 | Oyuncu ticareti: emir defteri; NPC fiyatları taban ve tavan | beklemede |
@@ -82,6 +82,24 @@ hata kodu eklerken ikisini birlikte güncelle.
 | `place_object` | `(p_type_id text, p_x int, p_y int, p_rotation int)` | maliyet, ayak izi, XP sunucuda hesaplanır |
 | `move_object` | `(p_object_id uuid, p_x int, p_y int, p_rotation int)` | ücretsiz, sahiplik kontrolü var |
 | `remove_object` | `(p_object_id uuid) → bigint` | iade tutarını döner |
+| `start_production` | `(p_object_id uuid)` | varsa hammaddeyi tüketir |
+| `harvest_object` | `(p_object_id uuid) → (item_id, quantity, xp_gained)` | `not_ready` fırlatabilir |
+| `harvest_all` | `() → (harvested, restarted, xp_gained, items)` | hepsini topla + yeniden başlat |
+| `sell_item` / `buy_item` | `(p_item_id text, p_quantity int) → bigint` | fiyat `items` tablosundan |
+
+## Zaman modeli (Faz 2)
+
+Cron yok. `placed_objects` yalnızca `state` ve `state_since` tutar; gerçek durum
+`effective_state(state, state_since, build_seconds, produce_seconds)` ile okuma
+anında hesaplanır. İstemci `world_objects` görünümünden okur:
+
+- `effective_state` — zaman uygulanmış durum
+- `finishes_at` — mevcut aşamanın biteceği an
+- `remaining_seconds` — **sunucuda** hesaplanmış kalan süre
+
+İstemci aradaki saniyeleri `src/lib/production.ts` ile sayar; kullanıcının
+sistem saati yanlış olsa bile geri sayım doğru olur çünkü mutlak zaman değil
+kalan süre baz alınır. Sayaç sıfırlanınca `useProductionClock` dünyayı tazeler.
 
 Çakışmayı uygulama değil veritabanı engeller:
 
@@ -94,12 +112,15 @@ exclude using gist (parcel_id with =, footprint with &&)
 anda aynı hücreye inşa etmesi imkânsız — `npm run test:db` bunu 8 eşzamanlı
 istekle sınıyor.
 
-## Faz 1'de kalan geçici çözümler
+## Kalan geçici çözümler
 
 - `GRID_SIZE` istemcide sabit 20. Sunucudaki parsel ölçüsüyle uyuşmazsa
   `useWorldSync` konsola uyarı basar. Faz 3'te parselden okunacak.
 - Şehirde tek paylaşılan ring-0 parseli var; parsel sahipliği Faz 3'te gelecek.
-- `state` alanı yazılıyor ama ilerlemiyor — zaman durum makinesi Faz 2'de.
+- `maintenance_per_hour` kolonu dolu ama **henüz tahsil edilmiyor**. Faz 2'de
+  ekonomiye tek para çıkışı NPC alış/satış makası; kalıcı giderler Faz 4'te
+  (ücretler + bakım) gelecek. O zamana kadar altın birikmeye eğilimli.
+- `worker_slots` gösteriliyor ama işçi ataması yok — Faz 4.
 - Komşuların yeni binaları ancak yeniden çekimde görünür; Realtime bildirimleri
   Faz 4'te eklenecek.
 

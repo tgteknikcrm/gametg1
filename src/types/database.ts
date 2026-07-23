@@ -117,27 +117,68 @@ export type Database = {
       }
       items: {
         Row: {
+          color: string
           id: string
           name: string
           npc_buy_price: number
           npc_daily_consumption: number
           npc_sell_price: number
+          sort_order: number
         }
         Insert: {
+          color?: string
           id: string
           name: string
           npc_buy_price?: number
           npc_daily_consumption?: number
           npc_sell_price?: number
+          sort_order?: number
         }
         Update: {
+          color?: string
           id?: string
           name?: string
           npc_buy_price?: number
           npc_daily_consumption?: number
           npc_sell_price?: number
+          sort_order?: number
         }
         Relationships: []
+      }
+      ledger: {
+        Row: {
+          amount: number
+          created_at: string
+          detail: string | null
+          id: number
+          reason: Database["public"]["Enums"]["ledger_reason"]
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          detail?: string | null
+          id?: never
+          reason: Database["public"]["Enums"]["ledger_reason"]
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          detail?: string | null
+          id?: never
+          reason?: Database["public"]["Enums"]["ledger_reason"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ledger_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       level_thresholds: {
         Row: {
@@ -213,6 +254,7 @@ export type Database = {
           category: Database["public"]["Enums"]["object_category"]
           color: string
           cost: number
+          harvest_xp: number
           height: number
           id: string
           input_item_id: string | null
@@ -238,6 +280,7 @@ export type Database = {
           category: Database["public"]["Enums"]["object_category"]
           color: string
           cost: number
+          harvest_xp?: number
           height: number
           id: string
           input_item_id?: string | null
@@ -263,6 +306,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["object_category"]
           color?: string
           cost?: number
+          harvest_xp?: number
           height?: number
           id?: string
           input_item_id?: string | null
@@ -487,7 +531,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      money_flow: {
+        Row: {
+          inflow: number | null
+          movements: number | null
+          net: number | null
+          outflow: number | null
+          reason: Database["public"]["Enums"]["ledger_reason"] | null
+        }
+        Relationships: []
+      }
+      world_objects: {
+        Row: {
+          effective_state: Database["public"]["Enums"]["object_state"] | null
+          finishes_at: string | null
+          id: string | null
+          last_collected_at: string | null
+          local_x: number | null
+          local_y: number | null
+          owner_id: string | null
+          remaining_seconds: number | null
+          rotation: number | null
+          state: Database["public"]["Enums"]["object_state"] | null
+          state_since: string | null
+          type_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "placed_objects_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "placed_objects_type_id_fkey"
+            columns: ["type_id"]
+            isOneToOne: false
+            referencedRelation: "object_types"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       active_parcel: {
@@ -511,7 +596,50 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      add_to_inventory: {
+        Args: { p_item: string; p_quantity: number; p_user: string }
+        Returns: undefined
+      }
       apply_level_up: { Args: { p_user: string }; Returns: undefined }
+      buy_item: {
+        Args: { p_item_id: string; p_quantity: number }
+        Returns: number
+      }
+      effective_state: {
+        Args: {
+          p_build_seconds: number
+          p_produce_seconds: number
+          p_state: Database["public"]["Enums"]["object_state"]
+          p_state_since: string
+        }
+        Returns: Database["public"]["Enums"]["object_state"]
+      }
+      finishes_at: {
+        Args: {
+          p_build_seconds: number
+          p_produce_seconds: number
+          p_state: Database["public"]["Enums"]["object_state"]
+          p_state_since: string
+        }
+        Returns: string
+      }
+      harvest_all: {
+        Args: never
+        Returns: {
+          harvested: number
+          items: Json
+          restarted: number
+          xp_gained: number
+        }[]
+      }
+      harvest_object: {
+        Args: { p_object_id: string }
+        Returns: {
+          item_id: string
+          quantity: number
+          xp_gained: number
+        }[]
+      }
       move_object: {
         Args: {
           p_object_id: string
@@ -574,13 +702,61 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      record_ledger: {
+        Args: {
+          p_amount: number
+          p_detail?: string
+          p_reason: Database["public"]["Enums"]["ledger_reason"]
+          p_user: string
+        }
+        Returns: undefined
+      }
       remove_object: { Args: { p_object_id: string }; Returns: number }
       rotated_footprint: {
         Args: { p_height: number; p_rotation: number; p_width: number }
         Returns: Record<string, unknown>
       }
+      sell_item: {
+        Args: { p_item_id: string; p_quantity: number }
+        Returns: number
+      }
+      start_production: {
+        Args: { p_object_id: string }
+        Returns: {
+          created_at: string
+          footprint: unknown
+          footprint_h: number
+          footprint_w: number
+          id: string
+          last_collected_at: string | null
+          local_x: number
+          local_y: number
+          owner_id: string
+          parcel_id: string
+          rotation: number
+          state: Database["public"]["Enums"]["object_state"]
+          state_since: string
+          type_id: string
+          workers_assigned: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "placed_objects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
+      ledger_reason:
+        | "build"
+        | "refund"
+        | "npc_sale"
+        | "npc_purchase"
+        | "maintenance"
+        | "wages"
+        | "tax"
+        | "land"
       object_category: "production" | "housing" | "civic" | "decor"
       object_state:
         | "building"
@@ -715,6 +891,16 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ledger_reason: [
+        "build",
+        "refund",
+        "npc_sale",
+        "npc_purchase",
+        "maintenance",
+        "wages",
+        "tax",
+        "land",
+      ],
       object_category: ["production", "housing", "civic", "decor"],
       object_state: ["building", "idle", "producing", "ready", "needs_workers"],
     },

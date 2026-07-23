@@ -37,6 +37,14 @@ export const gridMaterial = new THREE.LineBasicMaterial({
   opacity: 0.26,
 });
 
+/** Bina üstündeki durum göstergesi: 45° dönmüş küçük küp, elmas gibi görünür. */
+export const markerGeometry = new THREE.BoxGeometry(0.34, 0.34, 0.34)
+  .rotateY(Math.PI / 4)
+  .translate(0, 0.17, 0);
+
+/** Göstergeler tek InstancedMesh; renk durumdan gelir (instanceColor). */
+export const markerMaterial = new THREE.MeshLambertMaterial({ color: "#ffffff" });
+
 /** Binaların altındaki koyu taban — gövdeyi zemine oturtur, ucuz bir gölge yerine geçer. */
 export const foundationMaterial = new THREE.MeshBasicMaterial({
   color: "#2f3d24",

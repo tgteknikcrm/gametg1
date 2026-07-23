@@ -8,6 +8,7 @@ import { HoverHighlight } from "@/components/game/HoverHighlight";
 import { PlacedObjects } from "@/components/game/PlacedObjects";
 import { PlacementGhost } from "@/components/game/PlacementGhost";
 import { SelectionOutline } from "@/components/game/SelectionOutline";
+import { StateMarkers } from "@/components/game/StateMarkers";
 import type { GhostExecutor } from "@/store/useGameStore";
 
 /**
@@ -40,6 +41,7 @@ export default function GameCanvas({ executor }: { executor: GhostExecutor }) {
       <Ground executor={executor} />
       <HoverHighlight />
       <PlacedObjects />
+      <StateMarkers />
       <SelectionOutline />
       <PlacementGhost />
     </Canvas>

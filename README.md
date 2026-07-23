@@ -4,7 +4,8 @@
 Oyuncular tek bir kalıcı şehri paylaşır; arsa alır, üretim binaları kurar,
 NPC işçi çalıştırır, mal ticareti yapar.
 
-**Durum: Faz 1 tamamlandı** — kalıcılık çalışıyor. Sayfayı yenilediğinde şehrin yerinde.
+**Durum: Faz 2 tamamlandı** — üretim döngüsü çalışıyor.
+Bina kur → süre dolsun → üretime başla → hasat et → ambardan sat → para kazan.
 
 ## Çalıştırma
 
@@ -34,7 +35,11 @@ Bu iki değer gizli değildir; tarayıcıya gider. Veriyi koruyan şey RLS ve
 | `0001_schema.sql` | Tablolar, enum'lar, çakışma engelleyen EXCLUDE kısıtı |
 | `0002_rls.sql` | RLS açık, yalnızca `select` politikaları |
 | `0003_functions.sql` | `place_object`, `move_object`, `remove_object`, kayıt tetikleyicisi |
-| `0004_seed.sql` | Denge verisi: 18 nesne türü, seviye eşikleri, şehir, parsel |
+| `0004_seed.sql` | Denge verisi: nesne türleri, seviye eşikleri, şehir, parsel |
+| `0005_production.sql` | `effective_state`, `world_objects` görünümü, para defteri |
+| `0006_production_rpcs.sql` | `start_production`, `harvest_object`, `harvest_all`, `sell_item`, `buy_item` |
+| `0007_ledger_hooks.sql` | İnşaat ve yıkımı para defterine bağlar |
+| `0008_balance_production.sql` | Süreler, mal fiyatları, üretim zinciri |
 
 Prototip için Auth ayarlarından **e-posta onayını kapat** (Authentication →
 Providers → Email → Confirm email = off). Üretimde açılmalı.
@@ -50,21 +55,62 @@ Providers → Email → Confirm email = off). Üretimde açılmalı.
 | Sol tık (yerleştirme) | İnşa et |
 | `Q` / `E` | Hayaleti 90° döndür |
 | `Esc` | Moddan çık, seçimi temizle |
-| `Delete` | Seçili nesneyi kaldır (maliyetin %50'si iade) |
+| `Delete` | Seçili nesneyi kaldır — **onay penceresi açılır** |
+
+## Üretim döngüsü
+
+```
+LAND ──▶ ÜRETİM ──▶ MAL ──▶ PAZAR ──▶ PARA ──▶ daha fazla bina
+```
+
+Bir bina yerleştirdiğinde `state = building`, `state_since = now()` yazılır.
+**Hiçbir cron çalışmıyor** — güncel durum her okumada `now()` ile hesaplanır
+(`effective_state`). İstemci sunucudan gelen `remaining_seconds`'ı alıp aradaki
+saniyeleri kendisi sayar, sayaç bitince dünyayı tazeler.
+
+| Durum | Anlamı | Nasıl çıkılır |
+|---|---|---|
+| `building` | İnşaat sürüyor | süre dolunca kendiliğinden `idle` |
+| `idle` | Boşta | **Üretime başla** (varsa hammadde tüketilir) |
+| `producing` | Üretim sürüyor | süre dolunca kendiliğinden `ready` |
+| `ready` | Hasada hazır | **Hasat et** → mal ambara girer |
+
+Zincir: buğday tarlası → değirmen (un) → fırın (ekmek) ·
+pamuk tarlası → tekstil atölyesi (kumaş).
+Ham mal ucuz, işlenmiş mal pahalı — derinleşmek kârlı.
+
+Süreler saniye cinsinden `object_types` tablosunda; 5 saniyeden 1 güne kadar
+değerler kullanılıyor. Arayüz saniye/dakika/saat/gün/hafta biçimlemesini
+otomatik yapar, yani `604800` yazarsan "1h" gösterir.
+
+### Para akışı takibi
+
+Her altın hareketi `ledger` tablosuna sebebiyle kaydedilir (brief madde 4).
+Ekonominin sağlığına tek sorguyla bakabilirsin:
+
+```sql
+select * from public.money_flow;
+```
 
 ## Doğrulama
 
 ```bash
-npm run typecheck   # TypeScript strict
-npm run lint        # ESLint
-npm run verify      # 27 kontrol: grid matematiği, rotasyon, çarpışma (DB gerekmez)
-npm run test:db     # 24 kontrol: RPC sözleşmesi, RLS, sahiplik, YARIŞ TESTİ
-npm run build       # üretim derlemesi
-npm run gen:types   # şemadan TypeScript tipleri (SUPABASE_ACCESS_TOKEN gerekir)
+npm run typecheck        # TypeScript strict
+npm run lint             # ESLint
+npm run verify           # 58 kontrol: grid, rotasyon, çarpışma, hata eşlemesi,
+                         #   süre biçimleme, üretim sayacı (veritabanı gerekmez)
+npm run test:db          # 24 kontrol: RPC sözleşmesi, RLS, sahiplik, YARIŞ TESTİ
+npm run test:production  # 31 kontrol: zaman, üretim, hasat, pazar, para defteri
+npm run build            # üretim derlemesi
+npm run gen:types        # şemadan TypeScript tipleri
 ```
 
-`npm run test:db` gerçek kullanıcı kaydı açar, gerçek RPC çağırır ve kendi
-oluşturduğu nesneleri temizler. Yalnızca anon anahtarı kullanır.
+`npm run test:db` yalnızca anon anahtarı kullanır.
+`npm run test:production` ve `npm run gen:types` yönetim API'sine ihtiyaç duyar:
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN="sbp_..."; $env:SUPABASE_PROJECT_REF="<ref>"
+```
 
 ### Yarış testi ne kanıtlıyor
 
@@ -131,8 +177,8 @@ veriliyor. Nesne sayısı draw call sayısını değiştirmiyor.
 |-----|--------|-------|
 | 0 | İstemci iskeleti, veritabanı yok | ✅ |
 | 1 | Kalıcılık: Auth, şema, RPC'ler | ✅ |
-| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı | sırada |
-| 3 | Arsa ve şehir: halka parselleri, mesafeye göre fiyat | |
+| 2 | Üretim: zaman durum makinesi, hasat, envanter, NPC pazarı | ✅ |
+| 3 | Arsa ve şehir: halka parselleri, mesafeye göre fiyat | sırada |
 | 4 | İşgücü: nüfus, işçi ataması, ücretler | |
 | 5 | Avatar: enerji, eğitim/kültür/spor | |
 | 6 | Oyuncu ticareti: emir defteri | |

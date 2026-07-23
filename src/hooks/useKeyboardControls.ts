@@ -51,8 +51,8 @@ export function useKeyboardControls(mutations: WorldMutations) {
             game.notify("Bu nesne sana ait değil", "error");
             return;
           }
-          mutations.remove(target.id);
-          game.selectObject(null);
+          // Doğrudan silmiyoruz; onay penceresi açılıyor.
+          game.requestRemoval(target.id);
           break;
         }
         default:

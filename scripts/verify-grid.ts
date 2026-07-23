@@ -5,7 +5,9 @@
  * Sunucu tarafındaki karşılığı `scripts/db-contract-test.mjs` ile ayrıca test edilir.
  */
 import { buildOccupancy, occupiedCells } from "@/lib/collision";
+import { formatDuration, formatDurationLong } from "@/lib/duration";
 import { GameError, isFatalSessionError, toGameErrorCode, toGameErrorMessage } from "@/lib/errors";
+import { isStale, localProgress, localRemainingSeconds, localState } from "@/lib/production";
 import {
   GRID_SIZE,
   cellToWorld,
@@ -22,12 +24,12 @@ import type { ObjectType, WorldObject } from "@/types/game";
 
 let failures = 0;
 
-function check(name: string, condition: boolean) {
+function check(name: string, condition: boolean, detail = "") {
   if (condition) {
     console.log(`  ok   ${name}`);
   } else {
     failures++;
-    console.error(`  FAIL ${name}`);
+    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
   }
 }
 
@@ -50,6 +52,7 @@ function makeType(overrides: Partial<ObjectType> & Pick<ObjectType, "id" | "widt
     level_required: 1,
     refund_rate: 0.5,
     xp_reward: 10,
+    harvest_xp: 5,
     color: "#ffffff",
     block_height: 1,
     sort_order: 0,
@@ -114,6 +117,7 @@ console.log("\n4) Çarpışma ve doluluk haritası");
   const field: WorldObject = {
     id: "a", owner_id: "u", type_id: "quarry",
     local_x: 5, local_y: 5, rotation: 0, state: "idle", state_since: "",
+    last_collected_at: null, effective_state: "idle", finishes_at: null, remaining_seconds: 0,
   };
   const occupancy = buildOccupancy([field], TYPES);
 
@@ -161,6 +165,48 @@ console.log("\n6) Hata eşlemesi");
   check("profil eksikse oturum kurtarılamaz", isFatalSessionError("profile_missing"));
   check("dolu hücre oturumu bozmaz", !isFatalSessionError("cell_occupied"));
   check("her kodun Türkçe karşılığı var", toGameErrorMessage(new GameError("parcel_missing")).length > 0);
+}
+
+console.log("\n7) Süre biçimleme (saniye → hafta)");
+{
+  check("saniye", formatDuration(45) === "45sn", formatDuration(45));
+  check("dakika + saniye", formatDuration(200) === "3dk 20sn", formatDuration(200));
+  check("tam dakika", formatDuration(120) === "2dk", formatDuration(120));
+  check("saat + dakika", formatDuration(3900) === "1sa 5dk", formatDuration(3900));
+  check("gün + saat", formatDuration(187200) === "2g 4sa", formatDuration(187200));
+  check("hafta + gün", formatDuration(864000) === "1h 3g", formatDuration(864000));
+  check("sıfır -> hazır", formatDuration(0) === "hazır");
+  check("negatif kırılmıyor", formatDuration(-10) === "hazır");
+  check("uzun biçim", formatDurationLong(3900) === "1 saat 5 dakika", formatDurationLong(3900));
+}
+
+console.log("\n8) Üretim zamanı (istemci sayacı)");
+{
+  const t0 = 1_000_000;
+  const producing: WorldObject = {
+    id: "p", owner_id: "u", type_id: "wheat_field", local_x: 0, local_y: 0, rotation: 0,
+    state: "producing", state_since: "", last_collected_at: null,
+    effective_state: "producing", finishes_at: null, remaining_seconds: 120,
+  };
+
+  check("hemen sonra 120 sn kaldı", localRemainingSeconds(producing, t0, t0) === 120);
+  check("30 sn sonra 90 kaldı", localRemainingSeconds(producing, t0, t0 + 30_000) === 90);
+  check("süre dolunca 0", localRemainingSeconds(producing, t0, t0 + 200_000) === 0);
+  check("geriye giden saat şişirmiyor", localRemainingSeconds(producing, t0, t0 - 50_000) === 120);
+
+  check("dolmadan hâlâ 'producing'", localState(producing, t0, t0 + 60_000) === "producing");
+  check("dolunca yerel olarak 'ready'", localState(producing, t0, t0 + 130_000) === "ready");
+  check("sunucu bayat kaldıysa yakalanıyor", isStale(producing, t0, t0 + 130_000));
+  check("henüz bitmediyse bayat değil", !isStale(producing, t0, t0 + 10_000));
+
+  check("ilerleme yarıda %50", localProgress(producing, 120, t0, t0 + 60_000) === 0.5);
+  check("ilerleme sonda %100", localProgress(producing, 120, t0, t0 + 130_000) === 1);
+
+  const building: WorldObject = { ...producing, state: "building", effective_state: "building", remaining_seconds: 20 };
+  check("inşaat bitince 'idle'", localState(building, t0, t0 + 25_000) === "idle");
+
+  const idle: WorldObject = { ...producing, state: "idle", effective_state: "idle", remaining_seconds: 0 };
+  check("boştaki bina bayat sayılmaz", !isStale(idle, t0, t0 + 999_000));
 }
 
 console.log(failures === 0 ? "\nTüm kontroller geçti.\n" : `\n${failures} kontrol başarısız.\n`);

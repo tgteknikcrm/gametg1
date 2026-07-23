@@ -21,6 +21,15 @@ export type GameErrorCode =
   | "profile_missing"
   | "parcel_missing"
   | "no_selection"
+  // --- Faz 2: üretim ve pazar
+  | "still_building"
+  | "already_producing"
+  | "harvest_first"
+  | "missing_input"
+  | "not_producible"
+  | "insufficient_items"
+  | "invalid_quantity"
+  | "unknown_item"
   | "network"
   | "unknown";
 
@@ -38,6 +47,14 @@ const MESSAGES: Record<GameErrorCode, string> = {
   profile_missing: "Bu oturum artık geçerli değil, tekrar giriş yapman gerekiyor",
   parcel_missing: "Şehirde uygun arsa yok",
   no_selection: "Önce bir nesne seç",
+  still_building: "Bina hâlâ inşa ediliyor",
+  already_producing: "Zaten üretimde",
+  harvest_first: "Önce hasadı topla",
+  missing_input: "Hammadde yetmiyor",
+  not_producible: "Bu yapı üretim yapmıyor",
+  insufficient_items: "Ambarında yeterli mal yok",
+  invalid_quantity: "Geçersiz miktar",
+  unknown_item: "Bilinmeyen mal",
   network: "Sunucuya ulaşılamadı",
   unknown: "Beklenmeyen bir hata oldu",
 };

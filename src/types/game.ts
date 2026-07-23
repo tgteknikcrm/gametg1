@@ -19,14 +19,37 @@ export type Item = Tables["items"]["Row"];
 export type ObjectCategory = Database["public"]["Enums"]["object_category"];
 export type ObjectState = Database["public"]["Enums"]["object_state"];
 
+export type InventoryRow = Tables["inventory"]["Row"];
+export type LedgerRow = Tables["ledger"]["Row"];
+
 /**
- * Sahnede çizilen nesne. `placed_objects` satırının yalnızca istemcinin
- * ihtiyaç duyduğu kolonları — `footprint` gibi sunucuya özel alanlar çekilmez.
+ * Sahnede çizilen nesne — `world_objects` görünümünden gelir.
+ *
+ * Görünüm, ham satıra üç türev alan ekler: `effective_state` (zaman uygulanmış
+ * gerçek durum), `finishes_at` ve `remaining_seconds`. Bunlar sunucuda
+ * hesaplanır; istemci yalnızca aradaki saniyeleri sayar.
  */
 export type WorldObject = Pick<
-  Tables["placed_objects"]["Row"],
-  "id" | "owner_id" | "type_id" | "local_x" | "local_y" | "rotation" | "state" | "state_since"
->;
+  Database["public"]["Views"]["world_objects"]["Row"],
+  | "id"
+  | "owner_id"
+  | "type_id"
+  | "local_x"
+  | "local_y"
+  | "rotation"
+  | "state"
+  | "state_since"
+  | "last_collected_at"
+  | "effective_state"
+  | "finishes_at"
+  | "remaining_seconds"
+> & {
+  id: string;
+  type_id: string;
+  local_x: number;
+  local_y: number;
+  rotation: number;
+};
 
 /** Sunucudan gelen `rotation` number'dır; arayüz tarafında daraltıp kullanıyoruz. */
 export type Rotation = 0 | 90 | 180 | 270;

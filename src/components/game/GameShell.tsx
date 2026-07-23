@@ -5,12 +5,17 @@ import { Loader2 } from "lucide-react";
 
 import { LoadFailure } from "@/components/game/LoadFailure";
 import { BuildSidebar } from "@/components/ui-game/BuildSidebar";
+import { ConfirmRemoval } from "@/components/ui-game/ConfirmRemoval";
+import { HarvestAllButton } from "@/components/ui-game/HarvestAllButton";
+import { InventoryPanel } from "@/components/ui-game/InventoryPanel";
 import { ModeHint } from "@/components/ui-game/ModeHint";
 import { NoticeToast } from "@/components/ui-game/NoticeToast";
 import { SelectionPanel } from "@/components/ui-game/SelectionPanel";
 import { TopBar } from "@/components/ui-game/TopBar";
 import { useDevBridge } from "@/hooks/useDevBridge";
 import { useKeyboardControls } from "@/hooks/useKeyboardControls";
+import { useProductionClock } from "@/hooks/useProductionClock";
+import { useProductionMutations } from "@/hooks/useProductionMutations";
 import { useWorldMutations } from "@/hooks/useWorldMutations";
 import { useWorldSync } from "@/hooks/useWorldSync";
 import { useWorldStore } from "@/store/useWorldStore";
@@ -25,9 +30,11 @@ export function GameShell() {
   const userId = useWorldStore((state) => state.userId);
   const { isReady, error } = useWorldSync(userId);
   const mutations = useWorldMutations();
+  const production = useProductionMutations();
 
   useKeyboardControls(mutations);
-  useDevBridge(mutations);
+  useProductionClock();
+  useDevBridge(mutations, production);
 
   return (
     <main
@@ -47,10 +54,13 @@ export function GameShell() {
       />
 
       <TopBar />
+      <HarvestAllButton />
       <BuildSidebar />
+      <InventoryPanel />
       <SelectionPanel />
       <ModeHint />
       <NoticeToast />
+      <ConfirmRemoval />
 
       {error && <LoadFailure error={error} />}
       {!error && !isReady && (

@@ -44,7 +44,8 @@ export function BuildSidebar() {
   const items = byCategory[category] ?? [];
 
   return (
-    <aside className="hud-card pointer-events-auto absolute top-5 left-5 z-20 flex max-h-[calc(100vh-2.5rem)] w-[336px] flex-col overflow-hidden">
+    // Alt sol köşe Ambar panelinin; inşaat listesi oraya taşmasın diye sınırlı.
+    <aside className="hud-card pointer-events-auto absolute top-5 left-5 z-20 flex max-h-[54vh] w-[336px] flex-col overflow-hidden">
       <header className="flex items-center gap-2.5 px-4 pt-4 pb-3">
         <span className="grid size-8 place-items-center rounded-lg bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-400/25">
           <Hammer className="size-4" />

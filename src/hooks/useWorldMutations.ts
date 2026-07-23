@@ -25,6 +25,10 @@ function optimisticObject(
   rotation: Rotation,
 ): WorldObject {
   const type = getObjectType(typeId);
+  const buildSeconds = type?.build_seconds ?? 0;
+  const isBuilding = buildSeconds > 0;
+  const now = new Date();
+
   return {
     id: `optimistic-${++optimisticCounter}`,
     owner_id: userId,
@@ -32,8 +36,13 @@ function optimisticObject(
     local_x: origin.x,
     local_y: origin.y,
     rotation,
-    state: type && type.build_seconds > 0 ? "building" : "idle",
-    state_since: new Date().toISOString(),
+    state: isBuilding ? "building" : "idle",
+    state_since: now.toISOString(),
+    last_collected_at: null,
+    // Sunucu yanıtını beklemeden geri sayım başlasın.
+    effective_state: isBuilding ? "building" : "idle",
+    finishes_at: isBuilding ? new Date(now.getTime() + buildSeconds * 1000).toISOString() : null,
+    remaining_seconds: isBuilding ? buildSeconds : 0,
   };
 }
 
