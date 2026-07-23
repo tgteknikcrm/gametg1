@@ -99,7 +99,7 @@ export function useWorldSync(userId: string | null) {
   }, [items.data]);
 
   useEffect(() => {
-    if (world.data) useWorldStore.getState().setObjects(world.data);
+    if (world.data) useWorldStore.getState().setObjects(world.data.objects, world.data.fetchedAt);
   }, [world.data]);
 
   useEffect(() => {
@@ -140,8 +140,15 @@ export function useWorldSync(userId: string | null) {
       items.error ??
       levels.error ??
       null,
+    // Envanter de bekleniyor: aksi hâlde HUD, ambar boş görünürken açılıyordu.
     isReady: Boolean(
-      catalog.data && world.data && profile.data && parcel.data && items.data && levels.data,
+      catalog.data &&
+        world.data &&
+        profile.data &&
+        parcel.data &&
+        items.data &&
+        levels.data &&
+        inventory.data,
     ),
   };
 }

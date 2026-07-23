@@ -40,6 +40,9 @@ export function PlacedObjects() {
   const instanceIds = useRef<string[]>([]);
 
   const objects = useWorldStore((state) => state.objects);
+  // Katalog nesnelerden SONRA gelebilir. Buna abone olmazsak efekt bir daha
+  // çalışmaz ve hiçbir bina çizilmez.
+  const typesById = useWorldStore((state) => state.typesById);
   const mode = useGameStore((state) => state.mode);
   const selectedObjectId = useGameStore((state) => state.selectedObjectId);
 
@@ -84,7 +87,7 @@ export function PlacedObjects() {
     }
     if (body.instanceColor) body.instanceColor.needsUpdate = true;
     instanceIds.current = ids;
-  }, [objects, hiddenId]);
+  }, [objects, hiddenId, typesById]);
 
   const handleClick = useCallback((event: ThreeEvent<PointerEvent>) => {
     // Yerleştirme/taşıma modunda tıklama zemine ait; olayı durdurmuyoruz.

@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { getSupabase, hasSupabaseEnv } from "@/lib/supabase/client";
@@ -17,6 +18,7 @@ export interface SessionState {
  * Oturum tarayıcıda localStorage'da tutulur, jeton otomatik yenilenir.
  */
 export function useSession(): SessionState {
+  const client = useQueryClient();
   const [state, setState] = useState<SessionState>({
     status: hasSupabaseEnv() ? "loading" : "no-config",
     userId: null,
@@ -32,12 +34,18 @@ export function useSession(): SessionState {
       if (!active) return;
       const world = useWorldStore.getState();
       world.setUserId(userId);
-      // Çıkışta izdüşümü boşalt: bir sonraki kullanıcı önceki oyuncunun
-      // altınını bir kare boyunca bile görmesin.
+
+      // Çıkışta HER ŞEYİ boşalt. Aynı tarayıcıda ikinci bir oyuncu giriş
+      // yaptığında öncekinin ambarını, altınını veya şehrini bir kare bile
+      // görmemeli — önbellek de izdüşüm de temizleniyor.
       if (!userId) {
         world.setProfile(null);
-        world.setObjects([]);
+        world.setObjects([], 0);
+        world.setInventory([]);
+        world.setStorage([]);
+        client.clear();
       }
+
       setState({ status: userId ? "signed-in" : "signed-out", userId });
     };
 
@@ -51,7 +59,7 @@ export function useSession(): SessionState {
       active = false;
       data.subscription.unsubscribe();
     };
-  }, []);
+  }, [client]);
 
   return state;
 }

@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 
-import type { WorldMutations } from "@/hooks/useWorldMutations";
 import { useGameStore } from "@/store/useGameStore";
 import { useWorldStore } from "@/store/useWorldStore";
 
@@ -23,7 +22,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  *   Escape     → moddan çık, seçimi temizle
  *   Delete     → seçili nesneyi kaldır (yalnızca kendi binan)
  */
-export function useKeyboardControls(mutations: WorldMutations) {
+export function useKeyboardControls() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
@@ -62,5 +61,5 @@ export function useKeyboardControls(mutations: WorldMutations) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mutations]);
+  }, []);
 }

@@ -45,7 +45,7 @@ interface WorldState {
 
   setCatalog: (catalog: ObjectType[]) => void;
   setItems: (items: Item[]) => void;
-  setObjects: (objects: WorldObject[]) => void;
+  setObjects: (objects: WorldObject[], syncedAt: number) => void;
   setInventory: (rows: InventoryRow[]) => void;
   setLevels: (data: { levels: ObjectLevel[]; costs: ObjectLevelCost[] }) => void;
   setStorage: (rows: StorageStatus[]) => void;
@@ -86,12 +86,10 @@ export const useWorldStore = create<WorldState>((set, get) => ({
 
   setItems: (items) => set({ items, itemsById: new Map(items.map((item) => [item.id, item])) }),
 
-  setObjects: (objects) =>
-    set({
-      objects,
-      occupancy: buildOccupancy(objects, get().typesById),
-      syncedAt: Date.now(),
-    }),
+  // `syncedAt` çağırandan gelir: sunucudan gelen verinin alındığı an. İyimser
+  // güncellemeler bu değeri değiştirmez, yoksa geri sayımlar geri sıçrar.
+  setObjects: (objects, syncedAt) =>
+    set({ objects, occupancy: buildOccupancy(objects, get().typesById), syncedAt }),
 
   setInventory: (rows) => set({ inventory: new Map(rows.map((r) => [r.item_id, r.quantity])) }),
 

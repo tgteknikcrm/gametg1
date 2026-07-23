@@ -33,7 +33,7 @@ export function GameShell() {
   const mutations = useWorldMutations();
   const production = useProductionMutations();
 
-  useKeyboardControls(mutations);
+  useKeyboardControls();
   useProductionClock(production);
   useDevBridge(mutations, production);
 

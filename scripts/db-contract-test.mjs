@@ -147,7 +147,49 @@ const won = results.filter((r) => r.status === 200);
 won.forEach((r) => created.push(r.data.id));
 check("8 eşzamanlı istekten tam olarak 1'i başarılı", won.length === 1, `başarılı=${won.length}`);
 
-console.log("\n8) Temizlik");
+console.log("\n8) İç yardımcı fonksiyonlar dışarıya kapalı");
+// Geçmişte gerçek bir açık: `revoke ... from public`, Supabase'in anon ve
+// authenticated rollerine verdiği AYRI grant'ı kaldırmıyordu. `add_to_inventory`
+// giriş yapmadan çağrılabiliyor, sınırsız mal basılabiliyordu.
+// Var olmayan bir UUID ile çağırıyoruz: yetki açıksa FK hatası (23503) alırdık,
+// kapalıysa fonksiyon bulunamaz (42883) ya da yetki reddi (42501).
+{
+  const FAKE = "00000000-0000-0000-0000-0000000000ff";
+  const closed = (res) =>
+    res.status === 404 || res.data?.code === "42883" || res.data?.code === "42501" || res.data?.code === "PGRST202";
+
+  const probes = [
+    ["add_to_inventory", { p_user: FAKE, p_item: "bread", p_quantity: 1 }],
+    ["record_ledger", { p_user: FAKE, p_reason: "build", p_amount: -1 }],
+    ["apply_level_up", { p_user: FAKE }],
+    ["active_parcel", { p_city: FAKE }],
+  ];
+
+  for (const [fn, args] of probes) {
+    const anonCall = await rpc(fn, args);
+    const authCall = await rpc(fn, args, A.token);
+    check(
+      `${fn} anon'a kapalı`,
+      closed(anonCall),
+      `${anonCall.status} ${JSON.stringify(anonCall.data).slice(0, 90)}`,
+    );
+    check(
+      `${fn} giriş yapmış kullanıcıya da kapalı`,
+      closed(authCall),
+      `${authCall.status} ${JSON.stringify(authCall.data).slice(0, 90)}`,
+    );
+  }
+
+  // Oyuncuya açık RPC'ler ise giriş yapmadan reddedilmeli ama VAR olmalı.
+  const anonPlace = await rpc("place_object", { p_type_id: "tree", p_x: 0, p_y: 0, p_rotation: 0 });
+  check(
+    "oyuncu RPC'leri anon'a kapalı ama mevcut",
+    anonPlace.status >= 400 && anonPlace.data?.code !== "42883",
+    `${anonPlace.status} ${JSON.stringify(anonPlace.data).slice(0, 90)}`,
+  );
+}
+
+console.log("\n9) Temizlik");
 let removed = 0;
 for (const id of created) {
   const res = await rpc("remove_object", { p_object_id: id }, A.token);

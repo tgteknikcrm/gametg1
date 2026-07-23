@@ -4,16 +4,11 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import { useMemo } from "react";
 
 import { toGameErrorMessage } from "@/lib/errors";
-import { queryKeys } from "@/lib/queries";
+import { queryKeys, type WorldSnapshot } from "@/lib/queries";
 import { getSupabase } from "@/lib/supabase/client";
 import { useGameStore } from "@/store/useGameStore";
 import { getObjectType, useWorldStore } from "@/store/useWorldStore";
-import type { GridCell, Profile, Rotation, WorldObject } from "@/types/game";
-
-interface Snapshot {
-  world?: WorldObject[];
-  profile?: Profile;
-}
+import type { GridCell, Rotation, WorldObject } from "@/types/game";
 
 let optimisticCounter = 0;
 
@@ -40,14 +35,12 @@ function optimisticObject(
     state_since: now.toISOString(),
     last_collected_at: null,
     state_duration: buildSeconds,
-    // Sunucu yanıtını beklemeden geri sayım başlasın.
     effective_state: isBuilding ? "building" : "idle",
     finishes_at: isBuilding ? new Date(now.getTime() + buildSeconds * 1000).toISOString() : null,
     remaining_seconds: isBuilding ? buildSeconds : 0,
     level: 1,
     pending_level: null,
     effective_level: 1,
-    // Üretim inşaat bitince başlar; sunucu tazelemesi gerçek değerleri getirir.
     cycle_seconds: type?.produce_seconds ?? null,
     cycle_output: type?.output_qty ?? null,
     cycle_input: type?.input_qty ?? null,
@@ -57,24 +50,28 @@ function optimisticObject(
   };
 }
 
-function snapshot(client: QueryClient, userId: string | null): Snapshot {
-  return {
-    world: client.getQueryData<WorldObject[]>(queryKeys.world),
-    profile: client.getQueryData<Profile>(queryKeys.profile(userId)),
-  };
-}
-
-function rollback(client: QueryClient, userId: string | null, previous: Snapshot | undefined) {
-  if (previous?.world) client.setQueryData(queryKeys.world, previous.world);
-  if (previous?.profile) client.setQueryData(queryKeys.profile(userId), previous.profile);
+/**
+ * Dünya önbelleğini nesne listesi üzerinden günceller.
+ *
+ * `fetchedAt` OLDUĞU GİBİ taşınır: geri sayımların çapası odur, iyimser bir
+ * yazım yüzünden yenilenirse bütün sayaçlar geri sıçrar.
+ */
+function patchWorld(
+  client: QueryClient,
+  update: (objects: WorldObject[]) => WorldObject[],
+): void {
+  client.setQueryData<WorldSnapshot>(queryKeys.world, (previous) =>
+    previous ? { ...previous, objects: update(previous.objects) } : previous,
+  );
 }
 
 /**
  * Mutasyonlar. Hepsi `supabase.rpc()` — istemci yalnızca tanımlayıcı gönderir,
  * fiyatı ve ayak izini sunucu hesaplar.
  *
- * İyimser güncelleme: önbellek anında güncellenir, RPC hata verirse eski hâline
- * geri döner ve kullanıcıya sunucunun verdiği hata kodu Türkçe gösterilir.
+ * Geri alma HEDEFLİ: hatada tüm önbellek anlık görüntüsü geri yüklenmez, yalnızca
+ * o mutasyonun dokunduğu satır düzeltilir. Zincirleme inşaatta iki mutasyon
+ * aynı anda uçtuğunda biri diğerinin iyimser yazımını silmesin diye.
  */
 export function useWorldMutations() {
   const client = useQueryClient();
@@ -98,26 +95,17 @@ export function useWorldMutations() {
     },
     onMutate: async (input) => {
       await client.cancelQueries({ queryKey: queryKeys.world });
-      const previous = snapshot(client, userId);
-      const type = getObjectType(input.typeId);
+      if (!userId) return { temporaryId: null };
 
-      if (previous.world && userId) {
-        client.setQueryData<WorldObject[]>(queryKeys.world, [
-          ...previous.world,
-          optimisticObject(userId, input.typeId, input.origin, input.rotation),
-        ]);
-      }
-      if (previous.profile && type) {
-        client.setQueryData<Profile>(queryKeys.profile(userId), {
-          ...previous.profile,
-          coins: previous.profile.coins - type.cost,
-          xp: previous.profile.xp + type.xp_reward,
-        });
-      }
-      return previous;
+      const temporary = optimisticObject(userId, input.typeId, input.origin, input.rotation);
+      patchWorld(client, (objects) => [...objects, temporary]);
+      return { temporaryId: temporary.id };
     },
-    onError: (error, _input, previous) => {
-      rollback(client, userId, previous);
+    onError: (error, _input, context) => {
+      // Yalnızca bu mutasyonun eklediği satırı geri al.
+      if (context?.temporaryId) {
+        patchWorld(client, (objects) => objects.filter((o) => o.id !== context.temporaryId));
+      }
       notify(toGameErrorMessage(error), "error");
     },
     onSettled: invalidate,
@@ -135,21 +123,26 @@ export function useWorldMutations() {
     },
     onMutate: async (input) => {
       await client.cancelQueries({ queryKey: queryKeys.world });
-      const previous = snapshot(client, userId);
-      if (previous.world) {
-        client.setQueryData<WorldObject[]>(
-          queryKeys.world,
-          previous.world.map((object) =>
-            object.id === input.objectId
-              ? { ...object, local_x: input.origin.x, local_y: input.origin.y, rotation: input.rotation }
-              : object,
-          ),
+      const before = client
+        .getQueryData<WorldSnapshot>(queryKeys.world)
+        ?.objects.find((object) => object.id === input.objectId);
+
+      patchWorld(client, (objects) =>
+        objects.map((object) =>
+          object.id === input.objectId
+            ? { ...object, local_x: input.origin.x, local_y: input.origin.y, rotation: input.rotation }
+            : object,
+        ),
+      );
+      return { before };
+    },
+    onError: (error, input, context) => {
+      const before = context?.before;
+      if (before) {
+        patchWorld(client, (objects) =>
+          objects.map((object) => (object.id === input.objectId ? before : object)),
         );
       }
-      return previous;
-    },
-    onError: (error, _input, previous) => {
-      rollback(client, userId, previous);
       notify(toGameErrorMessage(error), "error");
     },
     onSettled: invalidate,
@@ -162,25 +155,18 @@ export function useWorldMutations() {
     },
     onMutate: async (objectId) => {
       await client.cancelQueries({ queryKey: queryKeys.world });
-      const previous = snapshot(client, userId);
-      const type = useWorldStore.getState().typeOf(objectId);
+      const before = client
+        .getQueryData<WorldSnapshot>(queryKeys.world)
+        ?.objects.find((object) => object.id === objectId);
 
-      if (previous.world) {
-        client.setQueryData<WorldObject[]>(
-          queryKeys.world,
-          previous.world.filter((object) => object.id !== objectId),
-        );
-      }
-      if (previous.profile && type) {
-        client.setQueryData<Profile>(queryKeys.profile(userId), {
-          ...previous.profile,
-          coins: previous.profile.coins + Math.floor(type.cost * type.refund_rate),
-        });
-      }
-      return previous;
+      patchWorld(client, (objects) => objects.filter((object) => object.id !== objectId));
+      return { before };
     },
-    onError: (error, _objectId, previous) => {
-      rollback(client, userId, previous);
+    onError: (error, _objectId, context) => {
+      if (context?.before) {
+        const restored = context.before;
+        patchWorld(client, (objects) => [...objects, restored]);
+      }
       notify(toGameErrorMessage(error), "error");
     },
     onSettled: invalidate,

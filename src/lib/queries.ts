@@ -114,8 +114,20 @@ export async function fetchParcel(): Promise<Parcel> {
   return data;
 }
 
+/**
+ * Dünya anlık görüntüsü.
+ *
+ * `fetchedAt` kritik: geri sayımlar sunucunun verdiği `remaining_seconds`'ı bu
+ * ana göre sayıyor. İyimser güncellemeler önbelleği değiştirirken bu alanı
+ * OLDUĞU GİBİ taşır — aksi hâlde her yerleştirmede bütün sayaçlar geri sıçrardı.
+ */
+export interface WorldSnapshot {
+  fetchedAt: number;
+  objects: WorldObject[];
+}
+
 /** Şehrin tamamı — komşuların binaları dahil (paylaşılan şehir). */
-export async function fetchWorld(): Promise<WorldObject[]> {
+export async function fetchWorld(): Promise<WorldSnapshot> {
   const { data, error } = await getSupabase()
     .from("world_objects")
     .select(WORLD_COLUMNS)
@@ -124,5 +136,5 @@ export async function fetchWorld(): Promise<WorldObject[]> {
   // supabase-js'in derleme zamanı select ayrıştırıcısı bu kadar uzun kolon
   // listesini çözemiyor; dönüş tipini imzada zaten daraltıyoruz. Kolon adı
   // yanlışsa PostgREST çalışma zamanında hata verir.
-  return data as unknown as WorldObject[];
+  return { fetchedAt: Date.now(), objects: data as unknown as WorldObject[] };
 }
